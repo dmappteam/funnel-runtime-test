@@ -17,9 +17,8 @@ afterEach(async () => {
 });
 
 describe('Mandatory #10: analytics route', () => {
-  // aggregate() is implemented by the analytics track and merged later; it still throws on this branch.
-  // Remove `.skip` after the merge. src/services/analytics.test.ts covers the route wiring with a stub.
-  it.skip('returns the aggregated report of the default funnel with ingestion stats', async () => {
+  // End to end with the real aggregate(). src/services/analytics.test.ts covers the route wiring with a stub.
+  it('returns the aggregated report of the default funnel with ingestion stats', async () => {
     const picks = [0.25, 0.75];
     ctx = await createTestApp({ random: () => picks.shift() ?? 0.25 });
     await release(ctx.app, 1);
