@@ -163,6 +163,16 @@ export function FunnelRuntime({ boot, requestedStep, tracker, notice: initialNot
     };
   });
 
+  // A pending retry must not outlive the runtime: after a restart it would report the old session as expired again.
+  // The ref is cleared, not kept stopped, so StrictMode's remount creates a new sync on first use.
+  useEffect(
+    () => () => {
+      syncRef.current?.stop();
+      syncRef.current = null;
+    },
+    [],
+  );
+
   // Layout effect: the context must be set before the first step_viewed, which is sent from a passive effect.
   useLayoutEffect(() => {
     tracker.setContext({ sessionId: session.sessionId, funnel, utm: session.utm });

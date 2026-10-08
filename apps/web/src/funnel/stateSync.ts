@@ -27,6 +27,7 @@ export interface StateSync {
    * it waits for the save in flight and holds queued saves until it is done, so the tab never conflicts with itself.
    */
   exclusive<T extends { state: SessionState }>(write: () => Promise<T>): Promise<T>;
+  /** No more saves or retries, and a response that arrives later triggers no callback. */
   stop(): void;
 }
 
@@ -84,9 +85,12 @@ export function createStateSync(options: StateSyncOptions): StateSync {
     queued = null;
     try {
       const res = await send(options.sessionId, { ...snapshot, rev });
+      if (stopped) return;
       advance(res.state.rev);
       failures = 0;
     } catch (err) {
+      // After stop() the runtime is gone, e.g. replaced by a restarted session: a late response changes nothing.
+      if (stopped) return;
       if (!(err instanceof HttpError) || isRetryableStatus(err.status)) {
         if (!uncertain.includes(snapshot)) uncertain.push(snapshot);
         queued ??= snapshot;
@@ -128,6 +132,7 @@ export function createStateSync(options: StateSyncOptions): StateSync {
       try {
         if (running) await running;
         const value = await write();
+        if (stopped) return value;
         advance(value.state.rev);
         if (queued && sameState(queued, value.state)) queued = null;
         return value;

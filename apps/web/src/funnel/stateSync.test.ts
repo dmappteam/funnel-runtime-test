@@ -168,6 +168,23 @@ describe('state sync', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it.each([
+    ['an expired session', new HttpError(410, { error: 'session_expired', message: 'Session expired' })],
+    ['a conflict', conflict({ answers: { work_mode: 'office' }, currentStepId: 'meeting_hours', rev: 1 })],
+    ['a network error', new TypeError('Failed to fetch')],
+  ])('ignores %s that arrives after stop()', async (_case, error) => {
+    const { sync, calls, onConflict, onExpired } = setup();
+    sync.save({ answers: { work_mode: 'remote' }, currentStepId: 'meeting_hours' });
+    sync.stop();
+    calls[0]!.fail(error);
+    await settle();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls).toHaveLength(1);
+    expect(onConflict).not.toHaveBeenCalled();
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
   it('runs the result request between saves and continues with its rev', async () => {
     const { sync, calls } = setup();
     const answers = { work_mode: 'remote' };
