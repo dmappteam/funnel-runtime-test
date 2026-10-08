@@ -345,6 +345,14 @@ describe('funnel page', () => {
     expect(sessionIdOf()).toBe(sessionId);
   });
 
+  it('starts a new session at the intro even when the link names a later step', async () => {
+    await open('/?step=work_mode&variant=B');
+    await waitForHeading('Is your team losing time to the way it works?');
+    expect(search()).toBe('?step=intro');
+    await settle(50);
+    expect(eventsOf(sessionIdOf())).toEqual([['step_viewed', 'intro']]);
+  });
+
   it('shows a retryable error and repeats the same session PUT on retry', async () => {
     server.failRequests(1);
     await open('/');
