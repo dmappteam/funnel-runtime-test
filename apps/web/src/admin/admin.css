@@ -296,6 +296,12 @@ table.data tr.adm-json-row td {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+/* Long config paths would squeeze the message into a one-word column: stack them on narrow screens. */
+@media (max-width: 640px) {
+  .adm-issues li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .adm-issues--error li {
   background: var(--danger-soft);
   color: var(--danger);
