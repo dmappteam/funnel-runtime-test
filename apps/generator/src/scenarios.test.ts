@@ -1,3 +1,4 @@
+import type { ClientEvent } from '@funnel/contracts';
 import { describe, expect, it } from 'vitest';
 import { UnreachableError } from './api';
 import { FakeServer, type Fault } from './fakeServer';
@@ -159,6 +160,23 @@ describe('iteration2', () => {
     expect(failedAssertions(run)).toEqual([]);
     expect(rollbacks).toBe(1);
     expect(run.server.activeVersion).toBe(2);
+  });
+
+  it('counts a recommendation_expanded as stored when the retry after a lost answer gets duplicate', async () => {
+    let rolledBack = false;
+    const lost: string[] = [];
+    const fault = (req: HttpRequest): Fault => {
+      if (req.path.endsWith('/rollback')) rolledBack = true;
+      if (!rolledBack || lost.length > 0 || req.path !== '/api/events' || !req.body?.includes('"recommendation_expanded"')) return null;
+      lost.push(req.body);
+      return 'lost';
+    };
+    const run = await runFake({ scenario: 'iteration2', sessions: 40 }, { configs: [rawConfig(1), rawConfig(2)], fault });
+    const events = (JSON.parse(lost[0]!) as { events: ClientEvent[] }).events;
+    const expanded = events.find((e) => e.name === 'recommendation_expanded')!;
+    expect(run.simulation.ingestion.statusesOf(expanded.event_id)[0]).toBe('duplicate');
+    expect(failedAssertions(run)).toEqual([]);
+    expect(run.report.ok).toBe(true);
   });
 
   it('needs v2 active', async () => {
