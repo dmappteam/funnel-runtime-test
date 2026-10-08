@@ -34,7 +34,9 @@ export function stepMetrics(sessions: readonly SessionSummary[], layout: StepLay
       reached[p]++;
       if (furthest > p) advanced[p]++;
     }
-    if (furthest !== layout.resultPosition && !s.resultViewed) dropoff[furthest]++;
+    // Leaving while the result was loading is a drop-off at the result step, so drop-offs plus
+    // sessions with a result always add up to the sessions that reached the first step.
+    if (!reachedResult(s)) dropoff[furthest]++;
   }
 
   const started = sessions.length;

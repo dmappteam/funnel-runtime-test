@@ -6,7 +6,7 @@ import { Bar, TableWrap, VariantName, toneClass } from './parts';
 function worstStepId(steps: StepMetrics[]): string | null {
   let worst: StepMetrics | null = null;
   for (const s of steps) {
-    if (s.type === 'result' || s.dropoff === 0) continue;
+    if (s.dropoff === 0) continue;
     if (!worst || s.dropoff > worst.dropoff || (s.dropoff === worst.dropoff && (s.dropoffRate ?? 0) > (worst.dropoffRate ?? 0))) {
       worst = s;
     }
@@ -68,13 +68,7 @@ function FunnelCard({ group }: { group: GroupReport }) {
                     </td>
                     <td className="num">{final ? DASH : formatPercent(s.conversion)}</td>
                     <td className="num">
-                      {final ? (
-                        DASH
-                      ) : (
-                        <>
-                          {formatCount(s.dropoff)} <span className="muted">· {formatPercent(s.dropoffRate)}</span>
-                        </>
-                      )}
+                      {formatCount(s.dropoff)} <span className="muted">· {formatPercent(s.dropoffRate)}</span>
                       {isWorst && <span className="badge badge-danger dash-worst-badge">Biggest drop-off</span>}
                     </td>
                   </tr>
@@ -94,7 +88,8 @@ export function StepFunnel({ groups }: { groups: GroupReport[] }) {
     <>
       <p className="dash-lead">
         <strong>To next</strong> = sessions that got past the step ÷ sessions that reached it, so a conditional step has its own
-        denominator. <strong>Drop-off</strong> = sessions whose furthest step it was and that never saw a result.
+        denominator. <strong>Drop-off</strong> = sessions whose furthest step it was and that never saw a result (on the
+        result step: left while the result was loading).
       </p>
       <div className="dash-grid-2">
         {groups.map((g) => (

@@ -488,3 +488,19 @@ describe('report', () => {
     expect(Date.parse(generatedAt)).toBeGreaterThanOrEqual(before);
   });
 });
+
+describe('result step drop-off', () => {
+  it('counts leaving while the result loads as a drop-off at the result step, so the funnel adds up', () => {
+    // s1 sees the result, s2 opens the result step but leaves before it renders, s3 leaves at timezone_span.
+    const events = eventsOf(
+      session('s1').walk(remote).result('balanced'),
+      session('s2').walk(remote),
+      session('s3').walk(pathTo(1, 'A', 'timezone_span')),
+    );
+    const g = groupOf(run(events), 1, 'A');
+    expect(stepOf(g, 'result').dropoff).toBe(1);
+    expect(stepOf(g, 'timezone_span').dropoff).toBe(1);
+    const dropoffs = g.steps.reduce((sum, s) => sum + s.dropoff, 0);
+    expect(dropoffs + g.kpi.reachedResult).toBe(stepOf(g, 'intro').reached);
+  });
+});
