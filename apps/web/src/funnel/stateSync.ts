@@ -22,8 +22,11 @@ export interface StateSyncOptions {
 export interface StateSync {
   /** Queues the latest state. Only the newest snapshot is sent: each one contains all answers. */
   save(snapshot: Snapshot): void;
-  /** Records the rev returned by another write to the session (the result request). */
-  observeRev(rev: number): void;
+  /**
+   * Runs another write to the session (the result request, which also bumps the rev) between saves:
+   * it waits for the save in flight and holds queued saves until it is done, so the tab never conflicts with itself.
+   */
+  exclusive<T extends { state: SessionState }>(write: () => Promise<T>): Promise<T>;
   stop(): void;
 }
 
@@ -41,34 +44,40 @@ function conflictState(err: HttpError): SessionState | null {
   return state && typeof state.rev === 'number' && typeof state.answers === 'object' ? state : null;
 }
 
-/** Background persistence of the session state: one request at a time, retries with backoff, optimistic concurrency by rev. */
+/** Background persistence of the session state: one write at a time, retries with backoff, optimistic concurrency by rev. */
 export function createStateSync(options: StateSyncOptions): StateSync {
   const send = options.save ?? saveState;
   const random = options.random ?? Math.random;
   let rev = options.rev;
   let queued: Snapshot | null = null;
-  let inFlight = false;
+  let running: Promise<void> | null = null;
+  let exclusiveWrites = 0;
   let failures = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
   const kick = () => {
-    if (!inFlight && timer === null && queued && !stopped) void run();
+    if (running || exclusiveWrites > 0 || timer !== null || !queued || stopped) return;
+    running = run().finally(() => {
+      running = null;
+      kick();
+    });
   };
 
   async function run() {
     const snapshot = queued!;
     queued = null;
-    inFlight = true;
-    let retry = false;
     try {
       const res = await send(options.sessionId, { ...snapshot, rev });
       rev = Math.max(rev, res.state.rev);
       failures = 0;
     } catch (err) {
       if (!(err instanceof HttpError) || isRetryableStatus(err.status)) {
-        retry = true;
         queued ??= snapshot;
+        timer = setTimeout(() => {
+          timer = null;
+          kick();
+        }, backoffDelay(failures++, random));
       } else if (err.status === 410) {
         stopped = true;
         options.onExpired();
@@ -80,24 +89,13 @@ export function createStateSync(options: StateSyncOptions): StateSync {
             queued = null;
             options.onConflict(server);
           } else if (server.currentStepId !== snapshot.currentStepId) {
-            // Same answers (our own earlier write won the race): only the position is outdated.
+            // Same answers (a retried save that had already landed): only the position is outdated.
             queued ??= snapshot;
           }
         }
         // Any other client error cannot succeed on retry: the snapshot is dropped.
       }
-    } finally {
-      inFlight = false;
     }
-    if (stopped) return;
-    if (retry) {
-      timer = setTimeout(() => {
-        timer = null;
-        kick();
-      }, backoffDelay(failures++, random));
-      return;
-    }
-    kick();
   }
 
   return {
@@ -105,8 +103,19 @@ export function createStateSync(options: StateSyncOptions): StateSync {
       queued = snapshot;
       kick();
     },
-    observeRev(next) {
-      rev = Math.max(rev, next);
+    async exclusive(write) {
+      exclusiveWrites++;
+      try {
+        if (running) await running;
+        const value = await write();
+        rev = Math.max(rev, value.state.rev);
+        const stored = value.state;
+        if (queued && queued.currentStepId === stored.currentStepId && sameAnswers(queued.answers, stored.answers)) queued = null;
+        return value;
+      } finally {
+        exclusiveWrites--;
+        kick();
+      }
     },
     stop() {
       stopped = true;

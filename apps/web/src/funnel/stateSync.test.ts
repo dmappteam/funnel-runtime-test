@@ -103,10 +103,43 @@ describe('state sync', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('uses the rev of the result request for the next save', async () => {
+  it('runs the result request between saves and continues with its rev', async () => {
     const { sync, calls } = setup();
-    sync.observeRev(7);
-    sync.save({ answers: {}, currentStepId: 'intro' });
-    expect(calls[0]!.body.rev).toBe(7);
+    const answers = { work_mode: 'remote' };
+    sync.save({ answers, currentStepId: 'result' });
+
+    let resolveResult!: () => void;
+    const write = vi.fn(
+      () =>
+        new Promise<{ state: SessionState }>((resolve) => {
+          resolveResult = () => resolve({ state: { answers, currentStepId: 'result', rev: 2 } });
+        }),
+    );
+    const result = sync.exclusive(write);
+    await settle();
+    expect(write).not.toHaveBeenCalled(); // waits for the save in flight
+
+    calls[0]!.ok(1);
+    await settle();
+    expect(write).toHaveBeenCalledTimes(1);
+    sync.save({ answers, currentStepId: 'meeting_hours' });
+    expect(calls).toHaveLength(1); // held while the result request runs
+
+    resolveResult();
+    await expect(result).resolves.toMatchObject({ state: { rev: 2 } });
+    await settle();
+    expect(calls[1]!.body).toEqual({ answers, currentStepId: 'meeting_hours', rev: 2 });
+  });
+
+  it('skips a queued save that the result request has already stored', async () => {
+    const { sync, calls } = setup();
+    const answers = { work_mode: 'remote' };
+    sync.save({ answers, currentStepId: 'tool_count' });
+    sync.save({ answers, currentStepId: 'result' });
+    const result = sync.exclusive(async () => ({ state: { answers, currentStepId: 'result', rev: 2 } }));
+    calls[0]!.ok(1);
+    await result;
+    await settle();
+    expect(calls).toHaveLength(1);
   });
 });

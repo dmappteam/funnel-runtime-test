@@ -144,11 +144,8 @@ export function FunnelRuntime({ boot, requestedStep, tracker, notice: initialNot
     show(stepId, 'back');
   };
 
-  const loadResult = () =>
-    requestResult(session.sessionId, live.current.answers).then((res) => {
-      sync().observeRev(res.state.rev);
-      return res;
-    });
+  // The result request also bumps the rev: it goes through the sync queue so it never races a state save.
+  const loadResult = () => sync().exclusive(() => requestResult(session.sessionId, live.current.answers));
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
