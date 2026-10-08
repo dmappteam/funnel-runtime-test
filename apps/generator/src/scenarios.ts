@@ -237,7 +237,7 @@ class Run {
   /** Analytics may already hold data, so the verification compares deltas. Without a snapshot there is nothing to verify, so a failure stops the run. */
   private async snapshot(admin: FunnelAdminResponse): Promise<void> {
     this.log.step('Analytics snapshot before the run');
-    const versions = admin.versions.map((v) => v.version);
+    const versions = admin.versions.map((v) => v.version).sort((a, b) => a - b);
     try {
       this.before = await fetchCounts(this.api, FUNNEL_ID, versions);
     } catch (err) {
