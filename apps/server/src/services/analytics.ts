@@ -31,7 +31,13 @@ export function buildAnalytics(db: Db, versions: VersionService, filters: Analyt
     if (config) configs[version] = config;
   }
 
-  const report = aggregate({ events, configs, filters, now: now.toISOString() });
+  const report = aggregate({
+    events,
+    configs,
+    filters,
+    activeVersion: versions.getActiveVersion(filters.funnelId),
+    now: now.toISOString(),
+  });
 
   // rejected_events has no funnel column (an unknown session has no funnel), so these stats cover all funnels.
   const rejectedRows = db

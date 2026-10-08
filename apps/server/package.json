@@ -14,6 +14,7 @@
     "@funnel/analytics": "*",
     "@funnel/contracts": "*",
     "@funnel/engine": "*",
+    "@funnel/generator": "*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.5",
     "zod": "^4.6.5"

@@ -5,6 +5,8 @@ import { createVersion, publishVersion, validateConfigText } from '../api/admin'
 import { Callout, IssueList, type Notice } from './Callout';
 import type { ConfirmOptions } from './ConfirmDialog';
 import { DiffView } from './DiffView';
+import { useI18n } from '../internal/i18n';
+import type { Messages } from '../internal/en';
 import { describeError } from './format';
 import type { ConfigEntry } from './useAdminData';
 
@@ -18,11 +20,11 @@ interface PublishPanelProps {
 
 type Busy = 'validate' | 'save' | 'publish' | null;
 
-function parseJson(text: string): { ok: true; value: unknown } | { ok: false; message: string } {
+function parseJson(text: string, fallback = 'Invalid JSON'): { ok: true; value: unknown } | { ok: false; message: string } {
   try {
     return { ok: true, value: JSON.parse(text) };
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : 'Invalid JSON' };
+    return { ok: false, message: err instanceof Error ? err.message : fallback };
   }
 }
 
@@ -39,6 +41,7 @@ function removedOperators(previous: unknown, nextText: string): string[] {
 
 /** Upload or paste a config → validate (errors, warnings, diff) → save as draft or save and publish. */
 export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChanged }: PublishPanelProps) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
   const [checked, setChecked] = useState<{ text: string; result: ValidateConfigResponse } | null>(null);
@@ -86,7 +89,7 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
 
   const validate = async () => {
     setNotice(null);
-    const parsed = parseJson(text);
+    const parsed = parseJson(text, t.publish.invalidJson);
     if (!parsed.ok) {
       setSyntaxError(parsed.message);
       setChecked(null);
@@ -98,7 +101,7 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
       setChecked({ text, result: await validateConfigText(funnelId, text) });
     } catch (err) {
       setChecked(null);
-      setNotice({ tone: 'danger', ...describeError(err) });
+      setNotice({ tone: 'danger', ...describeError(err, t) });
     } finally {
       setBusy(null);
     }
@@ -109,13 +112,9 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
     const version = result.version;
     if (publish) {
       const confirmed = await confirm({
-        title: `Save and publish v${version}?`,
-        body: (
-          <p>
-            New sessions will start on v{version}. Sessions already in progress stay on the version they started with.
-          </p>
-        ),
-        confirmLabel: `Publish v${version}`,
+        title: t.publish.confirmTitle(version),
+        body: <p>{t.admin.publishBody(version)}</p>,
+        confirmLabel: t.admin.publishLabel(version),
       });
       if (!confirmed) return;
     }
@@ -127,20 +126,20 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
         const published = await publishVersion(funnelId, saved.version);
         setNotice({
           tone: 'success',
-          title: published.previousVersion === published.activeVersion ? `v${saved.version} was already active.` : `v${saved.version} is now active.`,
-          detail: saved.created ? 'Stored as a new version and published.' : 'This exact config was already stored, so it was published as is.',
+          title: published.previousVersion === published.activeVersion ? t.publish.alreadyActive(saved.version) : t.admin.nowActive(saved.version),
+          detail: saved.created ? t.publish.storedAndPublished : t.publish.identicalPublished,
         });
       } else {
         setNotice({
           tone: 'success',
-          title: saved.created ? `v${saved.version} saved as a draft.` : `v${saved.version} is already stored with this exact config.`,
-          detail: 'Publish it from the versions table when it is ready.',
+          title: saved.created ? t.publish.savedDraft(saved.version) : t.publish.alreadyStored(saved.version),
+          detail: t.publish.publishLater,
         });
       }
       // The version status has changed (new → identical): validate again before the next save.
       setChecked(null);
     } catch (err) {
-      setNotice({ tone: 'danger', ...describeError(err) });
+      setNotice({ tone: 'danger', ...describeError(err, t) });
     } finally {
       setBusy(null);
       await onChanged();
@@ -150,11 +149,11 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
   return (
     <section className="card adm-card" aria-labelledby="adm-publish-title">
       <div className="adm-card-head">
-        <h2 id="adm-publish-title">Publish a new version</h2>
+        <h2 id="adm-publish-title">{t.publish.title}</h2>
         <div className="adm-toolbar">
           <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={onFileChosen} />
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInput.current?.click()}>
-            Choose file…
+            {t.publish.chooseFile}
           </button>
           <button
             type="button"
@@ -162,16 +161,16 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
             disabled={activeText === null}
             onClick={() => activeText !== null && replaceText(activeText, null)}
           >
-            {activeVersion === null ? 'Start from active' : `Start from v${activeVersion}`}
+            {activeVersion === null ? t.publish.startFromActive : t.publish.startFrom(activeVersion)}
           </button>
         </div>
       </div>
       <p className="adm-hint" id="adm-config-hint">
-        Choose a .json file, drop it on the editor or paste a config. Validation stores nothing.
+        {t.publish.hint}
       </p>
 
       <label className="adm-label" htmlFor="adm-config">
-        Config JSON{fileName ? <span className="adm-muted"> · {fileName}</span> : null}
+        {t.publish.configLabel}{fileName ? <span className="adm-muted"> · {fileName}</span> : null}
       </label>
       <textarea
         id="adm-config"
@@ -194,63 +193,57 @@ export function PublishPanel({ funnelId, activeVersion, configs, confirm, onChan
       />
       {syntaxError ? (
         <p className="adm-error-text" role="alert">
-          Invalid JSON: {syntaxError}
+          {t.publish.invalidJsonError(syntaxError)}
         </p>
       ) : null}
 
       <div className="adm-toolbar adm-publish-actions">
         <button type="button" className="btn btn-sm" disabled={!text.trim() || busy !== null} onClick={validate}>
-          {busy === 'validate' ? 'Validating…' : 'Validate'}
+          {busy === 'validate' ? t.publish.validating : t.publish.validate}
         </button>
         <span className="adm-spacer" />
         <button type="button" className="btn btn-secondary btn-sm" disabled={!canSave} onClick={() => save(false)}>
-          {busy === 'save' ? 'Saving…' : 'Save as draft'}
+          {busy === 'save' ? t.publish.saving : t.publish.saveDraft}
         </button>
         <button type="button" className="btn btn-sm" disabled={!canSave} onClick={() => save(true)}>
-          {busy === 'publish' ? 'Publishing…' : 'Save and publish'}
+          {busy === 'publish' ? t.publish.publishing : t.publish.saveAndPublish}
         </button>
       </div>
-      {outdated ? <p className="adm-hint">The config changed after validation. Validate again to save it.</p> : null}
+      {outdated ? <p className="adm-hint">{t.publish.outdated}</p> : null}
 
-      {result ? <ValidationReport result={result} operatorsRemoved={operatorsRemoved} /> : null}
+      {result ? <ValidationReport result={result} operatorsRemoved={operatorsRemoved} t={t} /> : null}
       {notice ? <Callout notice={notice} onDismiss={() => setNotice(null)} /> : null}
     </section>
   );
 }
 
-function ValidationReport({ result, operatorsRemoved }: { result: ValidateConfigResponse; operatorsRemoved: string[] }) {
+function ValidationReport({ result, operatorsRemoved, t }: { result: ValidateConfigResponse; operatorsRemoved: string[]; t: Messages }) {
   const { errors, warnings, version, versionStatus, diff } = result;
   return (
     <div className="adm-report" aria-live="polite">
       <div className="adm-report-summary">
         {result.ok ? (
-          <span className="badge badge-success">Valid</span>
+          <span className="badge badge-success">{t.publish.valid}</span>
         ) : (
-          <span className="badge badge-danger">
-            {errors.length} {errors.length === 1 ? 'error' : 'errors'}
-          </span>
+          <span className="badge badge-danger">{t.publish.errorCount(errors.length)}</span>
         )}
         {warnings.length > 0 ? (
-          <span className="badge badge-warning">
-            {warnings.length} {warnings.length === 1 ? 'warning' : 'warnings'}
-          </span>
+          <span className="badge badge-warning">{t.publish.warningCount(warnings.length)}</span>
         ) : null}
-        {version !== null && versionStatus === 'new' ? <span className="adm-muted">New version v{version}</span> : null}
+        {version !== null && versionStatus === 'new' ? <span className="adm-muted">{t.publish.newVersion(version)}</span> : null}
         {version !== null && versionStatus === 'identical' ? (
-          <span className="adm-muted">v{version} is already stored with identical content</span>
+          <span className="adm-muted">{t.publish.identical(version)}</span>
         ) : null}
       </div>
       {version !== null && versionStatus === 'conflict' ? (
-        <p className="adm-error-text">
-          v{version} already exists with different content. Increase &quot;version&quot; to store this config.
-        </p>
+        <p className="adm-error-text">{t.publish.conflict(version)}</p>
       ) : null}
       {errors.length > 0 ? <IssueList issues={errors} tone="error" /> : null}
       {warnings.length > 0 ? <IssueList issues={warnings} tone="warning" /> : null}
       {diff ? (
         <DiffView diff={diff} operatorsRemoved={operatorsRemoved} />
       ) : result.ok ? (
-        <p className="adm-muted">No active version to compare with.</p>
+        <p className="adm-muted">{t.publish.nothingToCompare}</p>
       ) : null}
     </div>
   );

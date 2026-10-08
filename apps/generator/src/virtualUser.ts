@@ -162,9 +162,11 @@ export class VirtualUser {
   async start(options: StartOptions = {}): Promise<void> {
     await this.guard(async () => {
       const override = this.plan.variantOverride;
+      // Every generated session is demo traffic, so the dashboard can remove it.
       const res = await this.api.createSession(FUNNEL_ID, this.record.sessionId, {
         utm: this.plan.profile.utm,
         ...(override ? { variant: override } : {}),
+        demo: true,
       });
       this.adopt(res);
       Object.assign(this.record, {

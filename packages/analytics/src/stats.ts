@@ -91,6 +91,51 @@ export function twoProportionTest(x1: number, n1: number, x2: number, n2: number
   };
 }
 
+const LANCZOS = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+
+/** ln Γ(x) for x > 0 (Numerical Recipes `gammln`, relative error below 2e-10). */
+function lnGamma(x: number): number {
+  const series = LANCZOS.reduce((acc, c, i) => acc + c / (x + 1 + i), 1.000000000190015);
+  return (x + 0.5) * Math.log(x + 5.5) - (x + 5.5) + Math.log((2.5066282746310005 * series) / x);
+}
+
+/** Regularized upper incomplete gamma Q(a, x): series below a + 1, Lentz's continued fraction above (Numerical Recipes `gammq`). */
+function gammaQ(a: number, x: number): number {
+  if (x <= 0) return 1;
+  const prefix = Math.exp(-x + a * Math.log(x) - lnGamma(a));
+  if (x < a + 1) {
+    let term = 1 / a;
+    let sum = term;
+    for (let n = 1; n < 1000 && Math.abs(term) > Math.abs(sum) * 1e-15; n++) {
+      term *= x / (a + n);
+      sum += term;
+    }
+    return Math.max(0, 1 - sum * prefix);
+  }
+  const tiny = 1e-300;
+  let b = x + 1 - a;
+  let c = 1 / tiny;
+  let d = 1 / b;
+  let h = d;
+  for (let i = 1; i < 1000; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b;
+    if (Math.abs(d) < tiny) d = tiny;
+    c = b + an / c;
+    if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    h *= d * c;
+    if (Math.abs(d * c - 1) < 1e-15) break;
+  }
+  return prefix * h;
+}
+
+/** Upper tail of the chi-square distribution with `df` degrees of freedom. */
+export function chiSquarePValue(statistic: number, df: number): number {
+  return Math.min(1, gammaQ(df / 2, statistic / 2));
+}
+
 /** Sessions per variant to detect a change from `p1` to `p2` (two-sided α = 0.05, 80% power). `null` when p1 = p2. */
 export function requiredSampleSize(p1: number, p2: number): number | null {
   if (p1 === p2) return null;

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '../internal/i18n';
 
 /** Color follows the variant's name, so a filtered-out variant never repaints the others. */
 export function toneClass(variant: string): string {
@@ -8,10 +9,11 @@ export function toneClass(variant: string): string {
 }
 
 export function VariantName({ variant }: { variant: string }) {
+  const { t } = useI18n();
   return (
     <span className={`dash-variant ${toneClass(variant)}`}>
       <span className="dash-swatch" aria-hidden="true" />
-      Variant {variant}
+      {t.common.variant(variant)}
     </span>
   );
 }

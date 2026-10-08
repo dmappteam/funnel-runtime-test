@@ -7,7 +7,7 @@ import {
   type VersionReport,
 } from '@funnel/contracts';
 import type { FunnelConfig } from '@funnel/engine';
-import { compareVariants } from './ab';
+import { compareVariants, type SplitCount } from './ab';
 import { stepMetrics } from './funnel';
 import { stepLayout, variantOrder } from './layout';
 import { eventStats, kpiSet, resultCounts } from './metrics';
@@ -90,25 +90,40 @@ function versionReports(sessions: readonly SessionSummary[], configs: AggregateI
   });
 }
 
+/** Randomly assigned sessions per variant of the config: forced variants do not follow the weights. */
+function splitOf(sessions: readonly SessionSummary[], config: FunnelConfig | undefined): SplitCount[] {
+  if (!config) return [];
+  const random = sessions.filter((s) => s.assignment === 'random');
+  return Object.entries(config.experiment.variants).map(([variant, { weight }]) => ({
+    variant,
+    weight,
+    sessions: random.filter((s) => s.variant === variant).length,
+  }));
+}
+
 /**
  * Pure aggregation of raw stored events into the dashboard report.
  * Events may contain duplicates and arrive in any order; every count is distinct sessions.
  */
 export function aggregate(input: AggregateInput): AnalyticsReport {
   const filters = normalizeFilters(input.filters);
+  const now = input.now ?? new Date().toISOString();
   const events = dedupeEvents(input.events).filter((e) => e.funnel_id === filters.funnelId);
   // Campaign and assignment are session attributes like version and variant, so a session is kept or dropped as a whole.
-  const sessions = summarizeSessions(events);
+  const all = summarizeSessions(events);
+  // Previews run stored versions from the admin, possibly unpublished ones, so they never count.
+  const sessions = all.filter((s) => s.assignment !== 'preview');
   const inCampaign = sessions.filter((s) => matchesCampaign(s, filters.campaign));
   const overrides = inCampaign.filter((s) => s.assignment === 'override');
-  const included = filters.includeOverrides ? inCampaign : inCampaign.filter((s) => s.assignment !== 'override');
+  const included = filters.includeOverrides ? inCampaign : inCampaign.filter((s) => s.assignment === 'random');
   const groups = groupReports(
     included.filter((s) => filters.version === null || s.version === filters.version),
     input.configs,
   );
+  const versions = versionReports(included, input.configs);
 
   return {
-    generatedAt: input.now ?? new Date().toISOString(),
+    generatedAt: now,
     filters,
     available: {
       versions: [...new Set(sessions.map((s) => s.version))].sort((a, b) => a - b),
@@ -118,9 +133,20 @@ export function aggregate(input: AggregateInput): AnalyticsReport {
       events: included.reduce((sum, s) => sum + s.events, 0),
       sessions: included.length,
       overrideSessions: overrides.length,
+      previewSessions: all.length - sessions.length,
     },
-    versions: versionReports(included, input.configs),
+    versions,
     groups,
-    ab: compareVariants(groups),
+    ab: compareVariants(groups, (version) => ({
+      split: splitOf(
+        inCampaign.filter((s) => s.version === version),
+        configOf(input.configs, version),
+      ),
+      timeline: {
+        since: versions.find((v) => v.version === version)?.firstSeen ?? null,
+        now,
+        live: version === input.activeVersion,
+      },
+    })),
   };
 }

@@ -109,10 +109,51 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_rejected_events_event_id ON rejected_events (event_id);
     `,
   },
+  {
+    version: 3,
+    name: 'session_preview_and_demo',
+    // Admin previews get their own assignment, and demo traffic is flagged so it can be removed.
+    // SQLite cannot change a CHECK constraint, so the table is rebuilt. No other table references sessions.
+    sql: `
+      CREATE TABLE sessions_new (
+        session_id     TEXT    PRIMARY KEY,
+        funnel_id      TEXT    NOT NULL,
+        funnel_version INTEGER NOT NULL,
+        experiment_id  TEXT    NOT NULL,
+        variant        TEXT    NOT NULL,
+        assignment     TEXT    NOT NULL CHECK (assignment IN ('random', 'override', 'preview')),
+        utm_source     TEXT,
+        utm_medium     TEXT,
+        utm_campaign   TEXT,
+        utm_content    TEXT,
+        utm_term       TEXT,
+        state_json     TEXT    NOT NULL,
+        state_rev      INTEGER NOT NULL DEFAULT 0,
+        result_id      TEXT,
+        created_at     TEXT    NOT NULL,
+        last_seen_at   TEXT    NOT NULL,
+        expires_at     TEXT    NOT NULL,
+        completed_at   TEXT,
+        demo           INTEGER NOT NULL DEFAULT 0 CHECK (demo IN (0, 1)),
+        FOREIGN KEY (funnel_id, funnel_version) REFERENCES funnel_versions (funnel_id, version)
+      );
+      INSERT INTO sessions_new (session_id, funnel_id, funnel_version, experiment_id, variant, assignment,
+        utm_source, utm_medium, utm_campaign, utm_content, utm_term, state_json, state_rev, result_id,
+        created_at, last_seen_at, expires_at, completed_at)
+      SELECT session_id, funnel_id, funnel_version, experiment_id, variant, assignment,
+        utm_source, utm_medium, utm_campaign, utm_content, utm_term, state_json, state_rev, result_id,
+        created_at, last_seen_at, expires_at, completed_at
+      FROM sessions;
+      DROP TABLE sessions;
+      ALTER TABLE sessions_new RENAME TO sessions;
+      CREATE INDEX idx_sessions_version ON sessions (funnel_id, funnel_version);
+      CREATE INDEX idx_sessions_demo ON sessions (funnel_id) WHERE demo = 1;
+    `,
+  },
 ];
 
 /** Applies pending migrations in order. Returns the versions applied by this call. */
-export function migrate(db: Database.Database): number[] {
+export function migrate(db: Database.Database, migrations: readonly Migration[] = MIGRATIONS): number[] {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     version    INTEGER PRIMARY KEY,
     name       TEXT NOT NULL,
@@ -128,7 +169,7 @@ export function migrate(db: Database.Database): number[] {
     );
   });
   const newlyApplied: number[] = [];
-  for (const m of MIGRATIONS) {
+  for (const m of migrations) {
     if (applied.has(m.version)) continue;
     apply(m);
     newlyApplied.push(m.version);

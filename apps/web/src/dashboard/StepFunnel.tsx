@@ -1,5 +1,6 @@
 import type { GroupReport, StepMetrics } from '@funnel/contracts';
-import { DASH, formatCount, formatPercent } from './format';
+import { DASH } from '../internal/format';
+import { useI18n } from '../internal/i18n';
 import { Bar, TableWrap, VariantName, toneClass } from './parts';
 
 /** The step that loses the most sessions; ties go to the higher drop-off rate. */
@@ -15,25 +16,26 @@ function worstStepId(steps: StepMetrics[]): string | null {
 }
 
 function FunnelCard({ group }: { group: GroupReport }) {
+  const { t, f } = useI18n();
   const worst = worstStepId(group.steps);
   return (
     <div className={`card dash-card ${toneClass(group.variant)}`}>
       <div className="dash-card-head">
         <VariantName variant={group.variant} />
-        <span className="muted">{formatCount(group.kpi.started)} started</span>
+        <span className="muted">{t.funnel.started(f.count(group.kpi.started))}</span>
       </div>
       {group.steps.length === 0 ? (
-        <p className="muted">The config of this version is unavailable, so its steps cannot be laid out.</p>
+        <p className="muted">{t.funnel.noConfig}</p>
       ) : (
         <TableWrap>
           <table className="data dash-funnel">
             <thead>
               <tr>
-                <th>Step</th>
-                <th className="num">Reached</th>
-                <th>From start</th>
-                <th className="num">To next</th>
-                <th className="num">Drop-off</th>
+                <th>{t.funnel.step}</th>
+                <th className="num">{t.funnel.reached}</th>
+                <th>{t.funnel.fromStart}</th>
+                <th className="num">{t.funnel.toNext}</th>
+                <th className="num">{t.funnel.dropoff}</th>
               </tr>
             </thead>
             <tbody>
@@ -50,26 +52,26 @@ function FunnelCard({ group }: { group: GroupReport }) {
                       <div className="dash-step-badges">
                         <span className="badge">{s.type}</span>
                         {s.conditional && (
-                          <span className="badge badge-warning" title="Shown only to sessions whose answers meet its visibleWhen condition">
-                            conditional
+                          <span className="badge badge-warning" title={t.funnel.conditionalHint}>
+                            {t.funnel.conditional}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="num">{formatCount(s.reached)}</td>
+                    <td className="num">{f.count(s.reached)}</td>
                     <td>
                       <div className="dash-bar-cell">
                         <Bar
                           value={s.reachedFromStart}
-                          title={`${formatCount(s.reached)} of ${formatCount(group.kpi.started)} started sessions`}
+                          title={t.funnel.reachedOf(f.count(s.reached), f.count(group.kpi.started))}
                         />
-                        <span className="dash-bar-value">{formatPercent(s.reachedFromStart)}</span>
+                        <span className="dash-bar-value">{f.percent(s.reachedFromStart)}</span>
                       </div>
                     </td>
-                    <td className="num">{final ? DASH : formatPercent(s.conversion)}</td>
+                    <td className="num">{final ? DASH : f.percent(s.conversion)}</td>
                     <td className="num">
-                      {formatCount(s.dropoff)} <span className="muted">· {formatPercent(s.dropoffRate)}</span>
-                      {isWorst && <span className="badge badge-danger dash-worst-badge">Biggest drop-off</span>}
+                      {f.count(s.dropoff)} <span className="muted">· {f.percent(s.dropoffRate)}</span>
+                      {isWorst && <span className="badge badge-danger dash-worst-badge">{t.funnel.worst}</span>}
                     </td>
                   </tr>
                 );
@@ -84,12 +86,15 @@ function FunnelCard({ group }: { group: GroupReport }) {
 
 /** One table per variant, side by side, each in the variant's own step order. */
 export function StepFunnel({ groups }: { groups: GroupReport[] }) {
+  const { t } = useI18n();
+  const { lead } = t.funnel;
   return (
     <>
       <p className="dash-lead">
-        <strong>To next</strong> = sessions that got past the step ÷ sessions that reached it, so a conditional step has its own
-        denominator. <strong>Drop-off</strong> = sessions whose furthest step it was and that never saw a result (on the
-        result step: left while the result was loading).
+        <strong>{lead.toNext}</strong>
+        {lead.toNextText}
+        <strong>{lead.dropoff}</strong>
+        {lead.dropoffText}
       </p>
       <div className="dash-grid-2">
         {groups.map((g) => (

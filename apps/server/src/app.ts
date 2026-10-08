@@ -10,6 +10,7 @@ import { analyticsRoutes } from './routes/analytics';
 import { eventRoutes } from './routes/events';
 import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
+import { DemoDataService, injectTransport } from './services/demo';
 import { EventService } from './services/events';
 import { SessionService } from './services/sessions';
 import { VersionService } from './services/versions';
@@ -41,6 +42,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const events = new EventService(db, sessions, now);
 
   const app = Fastify({ logger: options.logger ?? false });
+  const demo = new DemoDataService(db, versions, injectTransport(app));
   // Registered before the routes, so every route plugin inherits them.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, jsonBodyParser(app));
   app.setErrorHandler(handleError);
@@ -50,7 +52,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   await app.register(healthRoutes);
   await app.register(sessionRoutes, { sessions, defaultFunnelId });
   await app.register(eventRoutes, { events });
-  await app.register(adminRoutes, { versions });
+  await app.register(adminRoutes, { versions, sessions, demo });
   await app.register(analyticsRoutes, { db, versions, now, defaultFunnelId });
   if (webDistDir) await registerWebApp(app, webDistDir);
 

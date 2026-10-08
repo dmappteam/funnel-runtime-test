@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { normalCdf, rate, requiredSampleSize, twoProportionTest, wilsonInterval } from './stats';
+import { chiSquarePValue, normalCdf, rate, requiredSampleSize, twoProportionTest, wilsonInterval } from './stats';
+
+describe('chiSquarePValue', () => {
+  it('matches the critical values of the chi-square table', () => {
+    expect(chiSquarePValue(3.841459, 1)).toBeCloseTo(0.05, 6);
+    expect(chiSquarePValue(6.634897, 1)).toBeCloseTo(0.01, 6);
+    expect(chiSquarePValue(5.991465, 2)).toBeCloseTo(0.05, 6);
+    expect(chiSquarePValue(11.344867, 3)).toBeCloseTo(0.01, 6);
+    expect(chiSquarePValue(0.4549364, 1)).toBeCloseTo(0.5, 6);
+  });
+
+  it('agrees with the normal tail for one degree of freedom and is 1 at zero', () => {
+    expect(chiSquarePValue(2.5 ** 2, 1)).toBeCloseTo(2 * normalCdf(-2.5), 7);
+    expect(chiSquarePValue(0, 1)).toBe(1);
+    expect(chiSquarePValue(400, 1)).toBeLessThan(1e-80);
+  });
+});
 
 describe('wilsonInterval', () => {
   it('matches the textbook 95% interval for 30 / 100', () => {

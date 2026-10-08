@@ -1,6 +1,6 @@
-import type { UtmInput } from '@funnel/contracts';
+import { SESSION_ID_RE, type UtmInput } from '@funnel/contracts';
 
-/** Query parameters of the landing URL. After bootstrap they live on the session and the URL keeps only `step`. */
+/** Query parameters of the landing URL. After bootstrap they live on the session and the URL keeps only `step` and `session`. */
 export interface LaunchParams {
   utm: UtmInput;
   /** QA override of the experiment variant. */
@@ -8,6 +8,8 @@ export interface LaunchParams {
   /** `reset=1` starts a new session even if one is stored. */
   reset: boolean;
   step: string | null;
+  /** `session=<id>`: an admin preview of a stored version. It lives in the URL, never in storage. */
+  session: string | null;
 }
 
 const UTM_KEYS = ['source', 'medium', 'campaign', 'content', 'term'] as const;
@@ -29,13 +31,24 @@ export function readLaunchParams(search: string = window.location.search): Launc
     variant: VARIANT_RE.test(variant) ? variant : null,
     reset: reset === '1' || reset === 'true',
     step: readStepParam(search),
+    session: readSessionParam(search),
   };
+}
+
+function readSessionParam(search: string): string | null {
+  const session = new URLSearchParams(search).get('session')?.trim() ?? '';
+  return SESSION_ID_RE.test(session) ? session : null;
 }
 
 export function readStepParam(search: string = window.location.search): string | null {
   return new URLSearchParams(search).get('step')?.trim() || null;
 }
 
+/** Keeps a preview's `session`, so a reload stays in the preview. */
 export function stepHref(stepId: string): string {
-  return `${window.location.pathname}?step=${encodeURIComponent(stepId)}`;
+  const params = new URLSearchParams();
+  const session = readSessionParam(window.location.search);
+  if (session) params.set('session', session);
+  params.set('step', stepId);
+  return `${window.location.pathname}?${params.toString()}`;
 }

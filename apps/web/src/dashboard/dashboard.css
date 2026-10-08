@@ -157,9 +157,33 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
-.dash-tiles-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.dash-tiles-auto {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   margin-bottom: 12px;
+}
+
+/* Demo data: generator traffic on the active version and its removal. */
+.dash-demo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  margin-left: auto;
+}
+.dash-demo-actions {
+  display: flex;
+  gap: 8px;
+}
+.dash-demo-message {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: right;
+}
+.dash-demo-error {
+  color: var(--danger);
 }
 .dash-tile {
   min-width: 0;
@@ -343,12 +367,19 @@
     font-size: 22px;
   }
   .dash-tiles,
-  .dash-tiles-4,
+  .dash-tiles-auto,
   .dash-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .dash-generated {
     margin-left: 0;
+  }
+  .dash-demo {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+  .dash-demo-message {
+    text-align: left;
   }
   .dash-verdict-diff {
     font-size: 32px;

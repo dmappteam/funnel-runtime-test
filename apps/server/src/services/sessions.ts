@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   resultStepId,
   type Assignment,
@@ -47,6 +48,8 @@ export interface SessionRow {
   last_seen_at: string;
   expires_at: string;
   completed_at: string | null;
+  /** 1 for demo traffic, which the dashboard can remove. */
+  demo: number;
 }
 
 /** One entry of `details` in a 422 `invalid_answers` response. */
@@ -130,10 +133,10 @@ function prepareStatements(db: Db) {
     insert: db.prepare<SessionRow>(
       `INSERT INTO sessions (session_id, funnel_id, funnel_version, experiment_id, variant, assignment,
          utm_source, utm_medium, utm_campaign, utm_content, utm_term, state_json, state_rev, result_id,
-         created_at, last_seen_at, expires_at, completed_at)
+         created_at, last_seen_at, expires_at, completed_at, demo)
        VALUES (@session_id, @funnel_id, @funnel_version, @experiment_id, @variant, @assignment,
          @utm_source, @utm_medium, @utm_campaign, @utm_content, @utm_term, @state_json, @state_rev, @result_id,
-         @created_at, @last_seen_at, @expires_at, @completed_at)`,
+         @created_at, @last_seen_at, @expires_at, @completed_at, @demo)`,
     ),
     // The server-side session_started event. Its id is derived from the session id, so it exists at most once.
     insertStarted: db.prepare<SessionRow>(
@@ -185,31 +188,27 @@ export class SessionService {
 
         const variants = config.experiment.variants;
         const forced = request.variant !== undefined && Object.hasOwn(variants, request.variant) ? request.variant : undefined;
-        const variant = forced ?? pickVariant(variants, this.random());
-        const funnel = this.versions.getFunnel(funnelId, version, variant);
-        const created = now.toISOString();
-        const row: SessionRow = {
-          session_id: sessionId,
-          funnel_id: funnelId,
-          funnel_version: version,
-          experiment_id: config.experiment.id,
-          variant,
+        const row = this.insertNew(sessionId, now, {
+          funnelId,
+          version,
+          variant: forced ?? pickVariant(variants, this.random()),
           assignment: forced ? 'override' : 'random',
-          utm_source: request.utm.source ?? null,
-          utm_medium: request.utm.medium ?? null,
-          utm_campaign: request.utm.campaign ?? null,
-          utm_content: request.utm.content ?? null,
-          utm_term: request.utm.term ?? null,
-          state_json: stateJson({ answers: {}, currentStepId: funnel.sequence[0]! }),
-          state_rev: 0,
-          result_id: null,
-          created_at: created,
-          last_seen_at: created,
-          expires_at: addHours(now, funnel.session.ttlHours),
-          completed_at: null,
-        };
-        this.stmt.insert.run(row);
-        this.stmt.insertStarted.run(row);
+          utm: request.utm,
+          demo: request.demo === true,
+        });
+        return this.respond(row, true);
+      })
+      .immediate();
+  }
+
+  /** A new session on any stored version and variant, published or not. It never counts in analytics. */
+  openPreview(funnelId: string, version: number, variant: string): SessionResponse {
+    return this.db
+      .transaction((): SessionResponse => {
+        const config = this.versions.getConfig(funnelId, version);
+        if (!config) throw notFound(`Funnel ${funnelId} has no version ${version}`);
+        if (!Object.hasOwn(config.experiment.variants, variant)) throw badRequest(`Version ${version} has no variant "${variant}"`);
+        const row = this.insertNew(randomUUID(), this.now(), { funnelId, version, variant, assignment: 'preview', utm: {}, demo: false });
         return this.respond(row, true);
       })
       .immediate();
@@ -288,6 +287,40 @@ export class SessionService {
     const expires = addHours(now, this.funnelOf(row).session.ttlHours);
     this.stmt.touch.run(lastSeen, expires, row.session_id);
     return { ...row, last_seen_at: lastSeen, expires_at: expires };
+  }
+
+  /** Inserts the session at its first step together with the server-side session_started event. */
+  private insertNew(
+    sessionId: string,
+    now: Date,
+    s: { funnelId: string; version: number; variant: string; assignment: Assignment; utm: CreateSessionInput['utm']; demo: boolean },
+  ): SessionRow {
+    const funnel = this.versions.getFunnel(s.funnelId, s.version, s.variant);
+    const created = now.toISOString();
+    const row: SessionRow = {
+      session_id: sessionId,
+      funnel_id: s.funnelId,
+      funnel_version: s.version,
+      experiment_id: funnel.experimentId,
+      variant: s.variant,
+      assignment: s.assignment,
+      utm_source: s.utm.source ?? null,
+      utm_medium: s.utm.medium ?? null,
+      utm_campaign: s.utm.campaign ?? null,
+      utm_content: s.utm.content ?? null,
+      utm_term: s.utm.term ?? null,
+      state_json: stateJson({ answers: {}, currentStepId: funnel.sequence[0]! }),
+      state_rev: 0,
+      result_id: null,
+      created_at: created,
+      last_seen_at: created,
+      expires_at: addHours(now, funnel.session.ttlHours),
+      completed_at: null,
+      demo: s.demo ? 1 : 0,
+    };
+    this.stmt.insert.run(row);
+    this.stmt.insertStarted.run(row);
+    return row;
   }
 
   private load(sessionId: string, now: Date): SessionRow {

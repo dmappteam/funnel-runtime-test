@@ -10,6 +10,8 @@ import { AdminPage } from './AdminPage';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const PREVIEW_ID = '7d4c3f2e-1b0a-4c9d-8e7f-6a5b4c3d2e1f';
+
 /** Admin API with the server's semantics for the calls the page makes. */
 function fakeAdminApi() {
   const stored = new Map<number, unknown>([[1, v1]]);
@@ -28,6 +30,7 @@ function fakeAdminApi() {
         createdAt: '2026-10-08T10:00:00.000Z',
         isActive: version === stack.at(-1),
         sessions: version * 10,
+        variants: Object.keys((stored.get(version) as { experiment: { variants: object } }).experiment.variants),
       }));
     return { funnelId: 'workstyle-planner', activeVersion: stack.at(-1) ?? null, rollbackTarget: stack.at(-2) ?? null, versions, releases: releases.toReversed() };
   };
@@ -69,6 +72,10 @@ function fakeAdminApi() {
       const stack = active();
       releases.push({ id: releases.length + 1, version: stack.at(-2)!, action: 'rollback', fromVersion: stack.at(-1)!, createdAt: '2026-10-08T12:00:00.000Z' });
       return reply(200, { activeVersion: stack.at(-2), rolledBackFrom: stack.at(-1) });
+    }
+    if (path === '/previews') {
+      const { version: n, variant } = raw as { version: number; variant: string };
+      return reply(201, { session: { sessionId: PREVIEW_ID, funnelVersion: n, variant, assignment: 'preview' } });
     }
     return reply(404, { error: 'not_found', message: path });
   });
@@ -127,6 +134,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root?.unmount());
   document.body.innerHTML = '';
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -183,5 +191,40 @@ describe('admin page', () => {
     await click(document.querySelector('dialog .btn-danger')!);
     await waitFor(() => text().includes('Rolled back from v3 to v1.'), 'the rollback message');
     await waitFor(() => text().includes('Active v1'), 'v1 active again');
+  });
+
+  it('opens a stored draft as a preview session in a new tab', async () => {
+    const tab = { opener: window as Window | null, location: { href: '' }, close: vi.fn() };
+    vi.stubGlobal('open', vi.fn(() => tab));
+    await paste(JSON.stringify(v3));
+    await click(button('Validate'));
+    await waitFor(validated, 'the validation');
+    await click(button('Save as draft'));
+    await waitFor(() => text().includes('v3 saved as a draft.'), 'the draft');
+
+    // The active v1 row has no preview buttons, the stored v3 row has one per variant.
+    expect([...document.querySelectorAll('button')].filter((b) => b.textContent?.startsWith('Preview')).map((b) => b.textContent)).toEqual([
+      'Preview A ↗',
+      'Preview B ↗',
+    ]);
+    await click(button('Preview B ↗'));
+    await waitFor(() => text().includes('Preview of v3 · B opened in a new tab.'), 'the preview notice');
+    expect(tab.location.href).toBe(`${window.location.origin}/?session=${PREVIEW_ID}`);
+    expect(tab.opener).toBeNull();
+    expect(text()).toContain('Active v1');
+  });
+
+  it('switches the interface to Russian and remembers the choice', async () => {
+    await click(button('RU'));
+    expect(text()).toContain('Активна v1');
+    expect(button('Откатить').disabled).toBe(true);
+    expect(document.documentElement.lang).toBe('ru');
+
+    await act(async () => root!.unmount());
+    root = createRoot(document.body.appendChild(document.createElement('div')));
+    await act(async () => root!.render(<AdminPage />));
+    await waitFor(() => text().includes('Журнал релизов'), 'the Russian page after a reload');
+    await click(button('EN'));
+    expect(text()).toContain('Release log');
   });
 });

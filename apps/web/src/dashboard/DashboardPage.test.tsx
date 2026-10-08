@@ -78,7 +78,7 @@ const REPORT: AnalyticsResponse = {
   generatedAt: '2026-10-08T12:00:00.000Z',
   filters: { funnelId: 'workstyle-planner', version: null, campaign: null, includeOverrides: false },
   available: { versions: [2, 3], campaigns: ['spring', '(none)'] },
-  totals: { events: 5000, sessions: 550, overrideSessions: 7 },
+  totals: { events: 5000, sessions: 550, overrideSessions: 7, previewSessions: 2 },
   versions: [2, 3].map((version) => ({
     version,
     experimentId: `question-order-and-result-framing-v${version}`,
@@ -110,6 +110,15 @@ const REPORT: AnalyticsResponse = {
         { metric: 'ctr', control: rate(30, 100), treatment: rate(60, 130), absDiff: 0.16, diffCiLow: 0.04, diffCiHigh: 0.28, relativeLift: 0.54, pValue: 0.01, significant: true },
       ],
       requiredSessionsPerVariant: 121,
+      srm: {
+        variants: [
+          { variant: 'A', sessions: 200, expectedShare: 0.5 },
+          { variant: 'B', sessions: 200, expectedShare: 0.5 },
+        ],
+        pValue: 1,
+        mismatch: false,
+      },
+      eta: { status: 'reached', sessionsPerDay: 57, daysLeft: 0 },
     },
   ],
   ingestion: { rejected: 3, rejectedByReason: { unknown_step: 2, invalid_payload: 1 } },
@@ -118,7 +127,7 @@ const REPORT: AnalyticsResponse = {
 const EMPTY: AnalyticsResponse = {
   ...REPORT,
   available: { versions: [], campaigns: [] },
-  totals: { events: 0, sessions: 0, overrideSessions: 0 },
+  totals: { events: 0, sessions: 0, overrideSessions: 0, previewSessions: 0 },
   versions: [],
   groups: [],
   ab: [],
@@ -213,6 +222,7 @@ describe('DashboardPage', () => {
       'unique event ids, all versions, current campaign',
       'all versions, current campaign',
       'all versions, current campaign, excluded from the numbers',
+      'admin previews, never counted',
       'refused at ingestion',
     ]);
   });
@@ -223,10 +233,78 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain('Sign in required');
   });
 
-  it('suggests generating traffic when there are no events', async () => {
+  it('suggests demo data when there are no events', async () => {
     respond(200, EMPTY);
     await renderPage();
     expect(container.textContent).toContain('No events yet');
-    expect(container.textContent).toContain('npm run generate');
+    expect(container.textContent).toContain('Add demo data to run simulated visitors through the funnel');
+  });
+
+  it('shows the traffic split check and the time to the required sample', async () => {
+    respond(200, REPORT);
+    await renderPage();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Traffic split');
+    expect(text).toMatch(/A 50[.,]0% · B 50[.,]0%expected A 50[.,]0% · B 50[.,]0%; matches the weights, p = 1[.,]000/);
+    expect(text).toContain('Sample size reached');
+  });
+
+  it('distrusts the comparison when the split does not match the weights', async () => {
+    const [ab] = REPORT.ab;
+    const srm = { ...ab!.srm, variants: [{ ...ab!.srm.variants[0]!, sessions: 260 }, { ...ab!.srm.variants[1]!, sessions: 140 }], pValue: 0.00000002, mismatch: true };
+    const eta = { status: 'collecting' as const, sessionsPerDay: 48, daysLeft: 2.4 };
+    respond(200, { ...REPORT, ab: [{ ...ab!, srm, eta }] });
+    await renderPage();
+    const verdict = container.querySelector('.dash-verdict')!.textContent ?? '';
+    expect(verdict).toContain('Split mismatch');
+    expect(verdict).toContain('The traffic split does not match the configured weights');
+    expect(verdict).toContain('sample ratio mismatch, p = < 0.001');
+    expect(verdict).toContain('≈ 2 days');
+    expect(verdict).toContain('at ≈ 48 sessions a day');
+  });
+
+  it('adds demo data, then removes it after confirmation, refreshing the report each time', async () => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      const body =
+        url === '/api/admin/funnels/workstyle-planner/demo-data'
+          ? init.method === 'POST'
+            ? { version: 3, sessions: 200, completed: 141, events: { accepted: 3000, duplicate: 250, rejected: 30 } }
+            : { sessions: 200, events: 3200, rejectedEvents: 30 }
+          : REPORT;
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    });
+    await renderPage();
+    const button = (label: string) => [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+
+    await act(async () => button('Add demo data').click());
+    await settle();
+    expect(container.textContent).toContain('Added 200 demo sessions on v3, 141 reached the result.');
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/funnels/workstyle-planner/demo-data')[0]![1]).toMatchObject({ method: 'POST' });
+
+    await act(async () => button('Remove demo data').click());
+    expect(container.querySelector('dialog[open]')!.textContent).toContain('Real sessions, versions and the release log stay.');
+    await act(async () => (container.querySelector('dialog .btn-danger') as HTMLButtonElement).click());
+    await settle();
+    expect(container.textContent).toContain('Removed 200 demo sessions and 3200 of their events.');
+    expect(requestedUrls().filter((url) => url.startsWith('/api/analytics'))).toHaveLength(3);
+  });
+
+  it('switches to Russian with Russian number formatting', async () => {
+    respond(200, REPORT);
+    await renderPage();
+    const ru = [...container.querySelectorAll('button')].find((b) => b.textContent === 'RU')!;
+    await act(async () => ru.click());
+    const text = container.textContent ?? '';
+    expect(text).toContain('Аналитика воронки');
+    expect(text).toContain('A/B-тест · v3');
+    expect(text).toMatch(/\+15,0 п\.п\./);
+    expect(text).toContain('Выборка набрана');
+    window.localStorage.clear();
   });
 });

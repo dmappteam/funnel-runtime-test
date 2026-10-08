@@ -10,6 +10,8 @@ export interface BootstrapRequest {
   variant: string | null;
   /** Ignore the stored session: `?reset=1`, or the previous session expired. */
   fresh: boolean;
+  /** Admin preview from `?session=`. Continued without being stored, so the visitor's own session stays as it was. */
+  session: string | null;
 }
 
 export interface PendingSession {
@@ -28,14 +30,14 @@ export interface BootstrapDeps {
 const defaultDeps: BootstrapDeps = { getSession, createSession, readSessionId, writeSessionId, newId: randomId };
 
 export function launchRequest(params: LaunchParams): BootstrapRequest {
-  return { utm: params.utm, variant: params.variant, fresh: params.reset };
+  return { utm: params.utm, variant: params.variant, fresh: params.reset, session: params.session };
 }
 
-/** Replacement for an expired session: same attribution, same forced variant for QA sessions. */
+/** Replacement for an expired session: same attribution, same forced variant for QA and preview sessions. */
 export function restartRequest(session: SessionInfo): BootstrapRequest {
   const utm: UtmInput = {};
   for (const [key, value] of Object.entries(session.utm)) if (value) utm[key as keyof UtmInput] = value;
-  return { utm, variant: session.assignment === 'override' ? session.variant : null, fresh: true };
+  return { utm, variant: session.assignment === 'random' ? null : session.variant, fresh: true, session: null };
 }
 
 /**
@@ -48,6 +50,9 @@ export async function bootstrapSession(
   deps: BootstrapDeps = defaultDeps,
 ): Promise<SessionResponse> {
   if (!pending.current) {
+    // An expired or unknown preview falls through to the visitor's usual session.
+    const preview = request.session ? await loadStored(request.session, null, deps) : null;
+    if (preview) return preview;
     const storedId = request.fresh ? null : deps.readSessionId();
     const existing = storedId ? await loadStored(storedId, request.variant, deps) : null;
     if (existing) return existing;

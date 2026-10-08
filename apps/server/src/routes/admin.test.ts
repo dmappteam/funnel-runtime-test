@@ -1,7 +1,11 @@
 import type {
+  AddDemoDataResponse,
+  AnalyticsResponse,
   ApiError,
+  CreatePreviewResponse,
   CreateVersionResponse,
   FunnelAdminResponse,
+  RemoveDemoDataResponse,
   ValidateConfigResponse,
   VersionConfigResponse,
 } from '@funnel/contracts';
@@ -9,9 +13,12 @@ import { readRawConfig } from '@funnel/engine/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   FUNNEL_ID,
+  clientEvent,
   count,
   createTestApp,
+  getSession,
   openSession,
+  postEvents,
   publishVersion,
   release,
   rollback,
@@ -190,5 +197,86 @@ describe('admin API', () => {
     const invalid = (await validate({ funnelId: FUNNEL_ID })).json<ValidateConfigResponse>();
     expect(invalid).toMatchObject({ ok: false, version: null, diff: null, versionStatus: null });
     expect(invalid.errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('previews of stored versions', () => {
+  const preview = (body: object) => ctx.app.inject({ method: 'POST', url: `/api/admin/funnels/${FUNNEL_ID}/previews`, payload: body });
+  const analytics = async () =>
+    (await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL_ID}&includeOverrides=true` })).json<AnalyticsResponse>();
+
+  it('runs an unpublished version for the chosen variant and keeps it out of analytics', async () => {
+    ctx = await createTestApp();
+    await release(ctx.app, 1);
+    expect((await uploadVersion(ctx.app, readRawConfig(3))).statusCode).toBe(201);
+
+    const res = await preview({ version: 3, variant: 'B' });
+    expect(res.statusCode, res.body).toBe(201);
+    const { session } = res.json<CreatePreviewResponse>();
+    expect(session).toMatchObject({ funnelVersion: 3, variant: 'B', assignment: 'preview' });
+
+    // The funnel page loads it like any other session, pinned to v3 while v1 is active.
+    const loaded = await getSession(ctx.app, session.sessionId);
+    expect(loaded.data.funnel).toMatchObject({ version: 3, variant: 'B' });
+    // Events are checked against v3: recommendation_expanded does not exist in v1.
+    const sent = await postEvents(ctx.app, [
+      clientEvent(ctx.clock, session.sessionId, { name: 'recommendation_expanded', step_id: 'result', properties: { result_id: 'balanced' } }),
+    ]);
+    expect(sent.data).toMatchObject({ accepted: 1, rejected: 0 });
+    expect(count(ctx.db, `SELECT COUNT(*) FROM events WHERE session_id = ? AND assignment = 'preview'`, session.sessionId)).toBe(2);
+
+    expect((await analytics()).totals).toMatchObject({ sessions: 0, previewSessions: 1 });
+    expect((await analytics()).available.versions).toEqual([]);
+    expect((await overview()).activeVersion).toBe(1);
+  });
+
+  it('answers 404 for a version that is not stored and 400 for an unknown variant', async () => {
+    ctx = await createTestApp();
+    await release(ctx.app, 1);
+    expect((await preview({ version: 4, variant: 'A' })).statusCode).toBe(404);
+    expect((await preview({ version: 1, variant: 'C' })).statusCode).toBe(400);
+    expect((await preview({ version: 1, variant: 'toString' })).statusCode).toBe(400);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions')).toBe(0);
+  });
+});
+
+describe('demo data', () => {
+  const demoData = (method: 'POST' | 'DELETE', payload?: object, funnelId = FUNNEL_ID) =>
+    ctx.app.inject({ method, url: `/api/admin/funnels/${funnelId}/demo-data`, ...(payload ? { payload } : {}) });
+
+  it('adds generator sessions on the active version and removes only them', async () => {
+    ctx = await createTestApp();
+    await release(ctx.app, 2);
+    const visitor = await openSession(ctx.app);
+
+    const add = await demoData('POST', { sessions: 20 });
+    expect(add.statusCode, add.body).toBe(200);
+    const added = add.json<AddDemoDataResponse>();
+    expect(added).toMatchObject({ version: 2, sessions: 20 });
+    expect(added.completed).toBeGreaterThan(0);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions WHERE demo = 1 AND funnel_version = 2')).toBe(20);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions WHERE demo = 0')).toBe(1);
+
+    const removed = await demoData('DELETE');
+    expect(removed.statusCode, removed.body).toBe(200);
+    // Every accepted event plus the server's session_started, and the dead letters of the deliberately broken events.
+    expect(removed.json<RemoveDemoDataResponse>()).toEqual({
+      sessions: 20,
+      events: added.events.accepted + 20,
+      rejectedEvents: added.events.rejected,
+    });
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions')).toBe(1);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM events WHERE session_id <> ?', visitor.sessionId)).toBe(0);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM events WHERE session_id = ?', visitor.sessionId)).toBe(1);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM rejected_events')).toBe(0);
+  });
+
+  it('needs an active version of the demo funnel', async () => {
+    ctx = await createTestApp();
+    expect((await demoData('POST', {})).statusCode).toBe(400);
+    await release(ctx.app, 1);
+    expect((await demoData('POST', {}, 'other-funnel')).statusCode).toBe(400);
+    expect((await demoData('POST', { sessions: 501 })).statusCode).toBe(400);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions')).toBe(0);
   });
 });

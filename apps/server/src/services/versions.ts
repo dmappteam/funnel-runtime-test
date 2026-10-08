@@ -241,6 +241,7 @@ export class VersionService {
         createdAt: row.created_at,
         isActive: row.version === activeVersion,
         sessions: row.sessions,
+        variants: Object.keys(this.getConfig(funnelId, row.version)?.experiment.variants ?? {}),
       })),
       releases: releases.toReversed().map((row) => ({
         id: row.id,

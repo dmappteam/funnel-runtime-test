@@ -103,8 +103,28 @@ describe('session bootstrap', () => {
       assignment: 'override',
       utm: { source: 'google', medium: null, campaign: 'spring', content: null, term: null },
     };
-    expect(restartRequest(session)).toEqual({ utm: { source: 'google', campaign: 'spring' }, variant: 'B', fresh: true });
+    expect(restartRequest(session)).toEqual({ utm: { source: 'google', campaign: 'spring' }, variant: 'B', fresh: true, session: null });
+    expect(restartRequest({ ...session, assignment: 'preview' }).variant).toBe('B');
     expect(restartRequest({ ...session, assignment: 'random' }).variant).toBeNull();
+  });
+
+  it('opens an admin preview from the URL without replacing the stored session', async () => {
+    const preview = '5e0c2b7a-3d1f-4a8b-9c6d-7e5f4a3b2c1d';
+    const { deps: d, created, written } = deps();
+    const res = await bootstrapSession(launch(`?session=${preview}`), pending(), d);
+    expect(res.session.sessionId).toBe(preview);
+    expect(created).toEqual([]);
+    expect(written).toEqual([]);
+  });
+
+  it('falls back to the stored session when the preview is gone', async () => {
+    const getSession = vi.fn(async (id: string) => {
+      if (id === STORED) return sessionResponse(id);
+      throw new HttpError(410, null);
+    });
+    const { deps: d } = deps({ getSession });
+    const res = await bootstrapSession(launch('?session=5e0c2b7a-3d1f-4a8b-9c6d-7e5f4a3b2c1d'), pending(), d);
+    expect(res.session.sessionId).toBe(STORED);
   });
 });
 
@@ -115,7 +135,10 @@ describe('launch parameters', () => {
       variant: 'B',
       reset: true,
       step: 'work_mode',
+      session: null,
     });
     expect(readLaunchParams('?variant=../../etc').variant).toBeNull();
+    expect(readLaunchParams('?session=5E0C2B7A-3D1F-4A8B-9C6D-7E5F4A3B2C1D').session).toBe('5E0C2B7A-3D1F-4A8B-9C6D-7E5F4A3B2C1D');
+    expect(readLaunchParams('?session=not-a-session').session).toBeNull();
   });
 });

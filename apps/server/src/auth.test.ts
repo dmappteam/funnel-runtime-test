@@ -18,7 +18,7 @@ vi.mock('@funnel/analytics', () => ({
     generatedAt: input.now ?? '',
     filters: input.filters,
     available: { versions: [], campaigns: [] },
-    totals: { events: input.events.length, sessions: 0, overrideSessions: 0 },
+    totals: { events: input.events.length, sessions: 0, overrideSessions: 0, previewSessions: 0 },
     versions: [],
     groups: [],
     ab: [],

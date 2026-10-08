@@ -113,11 +113,12 @@ export function eventsOf(...sessions: SessionBuilder[]): AnalyticsEventRow[] {
   return sessions.flatMap((s) => s.events);
 }
 
-export function run(events: AnalyticsEventRow[], filters: Partial<AnalyticsFilters> = {}): AnalyticsReport {
+export function run(events: AnalyticsEventRow[], filters: Partial<AnalyticsFilters> = {}, activeVersion: number | null = null): AnalyticsReport {
   return aggregate({
     events,
     configs: CONFIGS,
     filters: { funnelId: FUNNEL_ID, version: null, campaign: null, includeOverrides: false, ...filters },
+    activeVersion,
     now: NOW,
   });
 }

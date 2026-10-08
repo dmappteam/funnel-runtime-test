@@ -236,7 +236,7 @@ describe('filters', () => {
 
   it('filters by exact campaign and by NO_CAMPAIGN', () => {
     const all = run(campaigns());
-    expect(all.totals).toEqual({ events: campaigns().length, sessions: 5, overrideSessions: 0 });
+    expect(all.totals).toEqual({ events: campaigns().length, sessions: 5, overrideSessions: 0, previewSessions: 0 });
     expect(all.available.campaigns).toEqual(['brand', 'spring', NO_CAMPAIGN]);
 
     const spring = run(campaigns(), { campaign: 'spring' });
@@ -300,7 +300,22 @@ describe('filters', () => {
     const other = session('x1', { funnelId: 'other-funnel', version: 7, campaign: 'elsewhere' }).walk(['intro']);
     const r = run(eventsOf(own, other));
     expect(r.available).toEqual({ versions: [1], campaigns: [NO_CAMPAIGN] });
-    expect(r.totals).toEqual({ events: own.events.length, sessions: 1, overrideSessions: 0 });
+    expect(r.totals).toEqual({ events: own.events.length, sessions: 1, overrideSessions: 0, previewSessions: 0 });
+  });
+
+  it('never counts admin preview sessions, even with overrides included', () => {
+    const events = eventsOf(
+      session('r1').walk(remote).result('async_native').cta('async_native'),
+      session('p1', { variant: 'B', assignment: 'preview' }).walk(pathTo(1, 'B', 'work_mode')),
+      // A preview of an unpublished version must not appear among the versions to pick.
+      session('p2', { version: 3, assignment: 'preview' }).walk(['intro']),
+    );
+    for (const includeOverrides of [false, true]) {
+      const r = run(events, { includeOverrides });
+      expect(r.totals).toMatchObject({ sessions: 1, overrideSessions: 0, previewSessions: 2 });
+      expect(r.groups.map((g) => [g.version, g.variant, g.kpi.started])).toEqual([[1, 'A', 1]]);
+      expect(r.available.versions).toEqual([1]);
+    }
   });
 });
 
@@ -463,6 +478,68 @@ describe('A/B comparison', () => {
       primary: { absDiff: 0, relativeLift: 0, pValue: 1, significant: false },
     });
   });
+
+  it('checks the random split against the 50/50 weights, ignoring forced variants', () => {
+    // 50 vs 50 is exactly the expected split; 70 vs 30: χ² = 2 · 20² / 50 = 16, p ≈ 6.3e-5.
+    const even = run(eventsOf(...cohort('A', 50, 0, 0), ...cohort('B', 50, 0, 0))).ab[0]!;
+    expect(even.srm).toEqual({
+      variants: [
+        { variant: 'A', sessions: 50, expectedShare: 0.5 },
+        { variant: 'B', sessions: 50, expectedShare: 0.5 },
+      ],
+      pValue: 1,
+      mismatch: false,
+    });
+    const skewed = run(eventsOf(...cohort('A', 70, 0, 0), ...cohort('B', 30, 0, 0))).ab[0]!;
+    expect(skewed.srm.mismatch).toBe(true);
+    expect(skewed.srm.pValue).toBeCloseTo(6.33e-5, 6);
+    // Forced B sessions do not follow the weights: with overrides included the comparison grows, the split check does not.
+    const forced = Array.from({ length: 40 }, (_, i) => session(`f-${i}`, { variant: 'B', assignment: 'override' }));
+    const withForced = run(eventsOf(...cohort('A', 50, 0, 0), ...cohort('B', 50, 0, 0), ...forced), { includeOverrides: true }).ab[0]!;
+    expect(withForced.primary.treatment.denominator).toBe(90);
+    expect(withForced.srm).toEqual(even.srm);
+  });
+
+  it('skips the split check while a variant expects fewer than 5 sessions', () => {
+    const r = run(eventsOf(...cohort('A', 4, 0, 0), ...cohort('B', 5, 0, 0))).ab[0]!;
+    expect(r.srm).toMatchObject({ pValue: null, mismatch: false });
+  });
+
+  describe('time to the required sample', () => {
+    /** `n` sessions per variant, all started `daysAgo` days before NOW, with 10% vs 30% CTA conversion. */
+    const experiment = (n: number, daysAgo: number) => {
+      const start = new Date(Date.parse(NOW) - daysAgo * 86_400_000).toISOString();
+      return ['A', 'B'].flatMap((variant) =>
+        Array.from({ length: n }, (_, i) => {
+          const s = session(`${variant}-${i}`, { variant, start });
+          if (i < n * (variant === 'A' ? 0.1 : 0.3)) s.result('balanced').cta('balanced');
+          return s;
+        }),
+      );
+    };
+
+    it('estimates the days left at the average rate since the first session', () => {
+      // 10% vs 30% needs (1.96 + 0.8416)² · (0.09 + 0.21) / 0.2² = 58.9 → 59 per variant.
+      // 20 per variant in 2 days is 10 per variant per day: 39 more take 3.9 days.
+      const ab = run(eventsOf(...experiment(20, 2)), {}, 1).ab[0]!;
+      expect(ab.requiredSessionsPerVariant).toBe(59);
+      expect(ab.eta.status).toBe('collecting');
+      expect(ab.eta.sessionsPerDay).toBeCloseTo(20, 6);
+      expect(ab.eta.daysLeft).toBeCloseTo(3.9, 6);
+    });
+
+    it('averages the rate over at least a day, so a burst of sessions is not extrapolated', () => {
+      // 20 per variant in the last hour count as 20 per variant per day: 39 more take 1.95 days, not two hours.
+      const ab = run(eventsOf(...experiment(20, 1 / 24)), {}, 1).ab[0]!;
+      expect(ab.eta.sessionsPerDay).toBeCloseTo(40, 6);
+      expect(ab.eta.daysLeft).toBeCloseTo(1.95, 6);
+    });
+
+    it('reports a reached sample, and no estimate for a version that no longer gets sessions', () => {
+      expect(run(eventsOf(...experiment(60, 2)), {}, 1).ab[0]!.eta).toMatchObject({ status: 'reached', daysLeft: 0 });
+      expect(run(eventsOf(...experiment(20, 2)), {}, 2).ab[0]!.eta).toMatchObject({ status: 'stopped', daysLeft: null });
+    });
+  });
 });
 
 describe('report', () => {
@@ -471,7 +548,7 @@ describe('report', () => {
       generatedAt: NOW,
       filters: { funnelId: FUNNEL_ID, version: null, campaign: null, includeOverrides: false },
       available: { versions: [], campaigns: [] },
-      totals: { events: 0, sessions: 0, overrideSessions: 0 },
+      totals: { events: 0, sessions: 0, overrideSessions: 0, previewSessions: 0 },
       versions: [],
       groups: [],
       ab: [],
@@ -484,6 +561,7 @@ describe('report', () => {
       events: [],
       configs: CONFIGS,
       filters: { funnelId: FUNNEL_ID, version: null, campaign: null, includeOverrides: false },
+      activeVersion: null,
     });
     expect(Date.parse(generatedAt)).toBeGreaterThanOrEqual(before);
   });

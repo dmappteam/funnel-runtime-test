@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useI18n } from '../internal/i18n';
 
 export interface ConfirmOptions {
   title: string;
@@ -28,6 +29,7 @@ export function useConfirm() {
 
 /** Native modal dialog: focus trap, Escape and the backdrop come from the browser. */
 function ConfirmDialog({ title, body, confirmLabel, tone = 'default', onClose }: ConfirmOptions & { onClose: (confirmed: boolean) => void }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ function ConfirmDialog({ title, body, confirmLabel, tone = 'default', onClose }:
       <div className="adm-dialog-body">{body}</div>
       <div className="adm-dialog-actions">
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => finish(false)}>
-          Cancel
+          {t.common.cancel}
         </button>
         <button type="button" className={`btn btn-sm${tone === 'danger' ? ' btn-danger' : ''}`} onClick={() => finish(true)}>
           {confirmLabel}

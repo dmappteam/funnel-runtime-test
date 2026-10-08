@@ -12,12 +12,6 @@
   border: 0;
 }
 
-.adm-brand {
-  margin-right: 8px;
-  color: var(--text);
-  font-weight: 700;
-}
-
 .adm-muted {
   color: var(--text-muted);
 }

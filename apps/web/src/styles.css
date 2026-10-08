@@ -241,6 +241,36 @@ textarea {
 .internal-nav a[aria-current='page'] {
   color: var(--text);
 }
+.internal-brand {
+  margin-right: 8px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* EN | RU switch of the internal pages. */
+.lang-switch {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.lang-switch button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-switch button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 
 table.data {
   width: 100%;

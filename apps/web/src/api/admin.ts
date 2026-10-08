@@ -1,7 +1,10 @@
 import type {
+  AddDemoDataResponse,
+  CreatePreviewResponse,
   CreateVersionResponse,
   FunnelAdminResponse,
   PublishResponse,
+  RemoveDemoDataResponse,
   RollbackResponse,
   ValidateConfigResponse,
   VersionConfigResponse,
@@ -43,4 +46,17 @@ export function publishVersion(funnelId: string, version: number): Promise<Publi
 
 export function rollbackVersion(funnelId: string): Promise<RollbackResponse> {
   return http<RollbackResponse>('POST', `${funnelUrl(funnelId)}/rollback`);
+}
+
+/** A session pinned to any stored version; the funnel opens it with `/?session=<id>`. */
+export function createPreview(funnelId: string, version: number, variant: string): Promise<CreatePreviewResponse> {
+  return http<CreatePreviewResponse>('POST', `${funnelUrl(funnelId)}/previews`, { version, variant });
+}
+
+export function addDemoData(funnelId: string): Promise<AddDemoDataResponse> {
+  return http<AddDemoDataResponse>('POST', `${funnelUrl(funnelId)}/demo-data`, {});
+}
+
+export function removeDemoData(funnelId: string): Promise<RemoveDemoDataResponse> {
+  return http<RemoveDemoDataResponse>('DELETE', `${funnelUrl(funnelId)}/demo-data`);
 }

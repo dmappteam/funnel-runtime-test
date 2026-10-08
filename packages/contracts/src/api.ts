@@ -46,10 +46,13 @@ export const CreateSessionRequestSchema = z.object({
   utm: UtmSchema.default({}),
   /** QA override of the variant (`?variant=` query parameter). Used only when the session is created. */
   variant: z.string().max(16).optional(),
+  /** Traffic of the demo data generator. It counts like any other session and can be removed from the dashboard. */
+  demo: z.boolean().optional(),
 });
 export type CreateSessionRequest = z.input<typeof CreateSessionRequestSchema>;
 
-export type Assignment = 'random' | 'override';
+/** `override`: forced by `?variant=`. `preview`: an admin preview of a stored version, never counted in analytics. */
+export type Assignment = 'random' | 'override' | 'preview';
 
 export interface SessionInfo {
   sessionId: string;
@@ -148,6 +151,8 @@ export interface VersionSummary {
   isActive: boolean;
   /** Sessions pinned to this version. */
   sessions: number;
+  /** Experiment variants in config order. */
+  variants: string[];
 }
 
 export type ReleaseAction = 'publish' | 'rollback';
@@ -215,4 +220,43 @@ export interface PublishResponse {
 export interface RollbackResponse {
   activeVersion: number;
   rolledBackFrom: number;
+}
+
+/**
+ * POST /api/admin/funnels/:funnelId/previews — a session pinned to any stored version and variant, published or not.
+ * The funnel opens it with `/?session=<id>`. Preview sessions never count in analytics.
+ */
+export const CreatePreviewRequestSchema = z.object({
+  version: z.number().int().positive(),
+  variant: z.string().min(1).max(16),
+});
+export type CreatePreviewRequest = z.infer<typeof CreatePreviewRequestSchema>;
+
+export interface CreatePreviewResponse {
+  session: SessionInfo;
+}
+
+// ---------------------------------------------------------------------------
+// Admin: demo data
+// ---------------------------------------------------------------------------
+
+/** POST /api/admin/funnels/:funnelId/demo-data — runs the traffic generator against the active version through the public API. */
+export const AddDemoDataRequestSchema = z.object({
+  sessions: z.number().int().min(1).max(500).default(200),
+});
+export type AddDemoDataRequest = z.input<typeof AddDemoDataRequestSchema>;
+
+export interface AddDemoDataResponse {
+  version: number;
+  sessions: number;
+  /** Sessions that reached the result. */
+  completed: number;
+  events: { accepted: number; duplicate: number; rejected: number };
+}
+
+/** DELETE /api/admin/funnels/:funnelId/demo-data — removes demo sessions with their events and rejected events. */
+export interface RemoveDemoDataResponse {
+  sessions: number;
+  events: number;
+  rejectedEvents: number;
 }

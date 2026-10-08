@@ -122,6 +122,30 @@ export interface ProportionTest {
   significant: boolean;
 }
 
+/** Sample ratio mismatch check: does the random split follow the configured weights? */
+export interface SampleRatioCheck {
+  /** Variants with a positive weight, in config order. Only randomly assigned sessions count: forced variants ignore the weights. */
+  variants: { variant: string; sessions: number; expectedShare: number }[];
+  /** Chi-square goodness of fit against the weights. `null` while a variant expects fewer than 5 sessions. */
+  pValue: number | null;
+  /** p < 0.01: the split is off, so the comparison cannot be trusted. */
+  mismatch: boolean;
+}
+
+export interface ExperimentEta {
+  /**
+   * `reached`: both compared variants have the required sessions.
+   * `collecting`: the version is active and `daysLeft` estimates the rest.
+   * `stopped`: the version is no longer active, so no new sessions arrive.
+   * `unknown`: nothing to estimate from.
+   */
+  status: 'reached' | 'collecting' | 'stopped' | 'unknown';
+  /** Sessions per day in the compared variants, averaged since the version's first session over at least one day. */
+  sessionsPerDay: number | null;
+  /** Days until both compared variants have `requiredSessionsPerVariant` at that rate. */
+  daysLeft: number | null;
+}
+
 export interface AbComparison {
   version: number;
   experimentId: string;
@@ -133,6 +157,8 @@ export interface AbComparison {
   secondary: ProportionTest[];
   /** Sessions per variant for 80% power at α = 0.05 to detect the observed difference (+5 p.p. if none is observed). */
   requiredSessionsPerVariant: number | null;
+  srm: SampleRatioCheck;
+  eta: ExperimentEta;
 }
 
 export interface VersionReport {
@@ -158,6 +184,8 @@ export interface AnalyticsReport {
     sessions: number;
     /** Sessions with a forced variant in the current campaign filter. */
     overrideSessions: number;
+    /** Admin previews of a stored version. Never counted anywhere else. */
+    previewSessions: number;
   };
   versions: VersionReport[];
   groups: GroupReport[];
@@ -171,7 +199,9 @@ export interface AggregateInput {
   /** Config of every version present in `events`, keyed by version number. */
   configs: Record<number, FunnelConfig>;
   filters: AnalyticsFilters;
-  /** ISO time used for `generatedAt`. */
+  /** The version new sessions get. Only its experiment still collects sessions. */
+  activeVersion: number | null;
+  /** ISO time used for `generatedAt` and the experiment ETA. */
   now?: string;
 }
 

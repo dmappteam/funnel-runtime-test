@@ -1,47 +1,38 @@
-import type { AnalyticsResponse, RejectReason } from '@funnel/contracts';
-import { formatCount } from './format';
+import type { AnalyticsResponse } from '@funnel/contracts';
+import { useI18n } from '../internal/i18n';
 import { TableWrap, Tile } from './parts';
 
-const REASONS: Record<RejectReason, string> = {
-  invalid_payload: 'Malformed event',
-  unknown_session: 'Unknown session',
-  server_only_event: 'Server-only event sent by a client',
-  event_not_allowed: 'Not allowed by the pinned version',
-  unknown_step: "Step not in the session's variant",
-  invalid_properties: 'Invalid properties',
-};
-
-const reasonLabel = (reason: string) => (Object.hasOwn(REASONS, reason) ? REASONS[reason as RejectReason] : reason);
-
-/** `totals` ignore the version filter: they cover every version in the current campaign. */
-const SCOPE = 'all versions, current campaign';
-
 export function DataQuality({ report }: { report: AnalyticsResponse }) {
+  const { t, f } = useI18n();
   const { totals, filters } = report;
   const ingestion = report.ingestion ?? { rejected: 0, rejectedByReason: {} };
   const reasons = Object.entries(ingestion.rejectedByReason).sort(([, a], [, b]) => b - a);
+  const reasonLabel = (reason: string) => (Object.hasOwn(t.quality.reasons, reason) ? t.quality.reasons[reason as keyof typeof t.quality.reasons] : reason);
+  // `totals` ignore the version filter: they cover every version in the current campaign.
+  const scope = t.quality.scope;
   return (
     <div className="card dash-card">
-      <div className="dash-tiles dash-tiles-4">
-        <Tile label="Events" value={formatCount(totals.events)} detail={`unique event ids, ${SCOPE}`} />
-        <Tile label="Sessions" value={formatCount(totals.sessions)} detail={SCOPE} />
+      <div className="dash-tiles dash-tiles-auto">
+        <Tile label={t.quality.events} value={f.count(totals.events)} detail={t.quality.eventsDetail(scope)} />
+        <Tile label={t.quality.sessions} value={f.count(totals.sessions)} detail={scope} />
         <Tile
-          label="QA override sessions"
-          value={formatCount(totals.overrideSessions)}
-          detail={`${SCOPE}, ${filters.includeOverrides ? 'included in' : 'excluded from'} the numbers`}
+          label={t.quality.overrides}
+          value={f.count(totals.overrideSessions)}
+          detail={t.quality.overridesDetail(scope, filters.includeOverrides)}
         />
-        <Tile label="Rejected events" value={formatCount(ingestion.rejected)} detail="refused at ingestion" />
+        <Tile label={t.quality.previews} value={f.count(totals.previewSessions)} detail={t.quality.previewsDetail} />
+        <Tile label={t.quality.rejected} value={f.count(ingestion.rejected)} detail={t.quality.rejectedDetail} />
       </div>
       {reasons.length === 0 ? (
-        <p className="muted">No events were rejected.</p>
+        <p className="muted">{t.quality.noneRejected}</p>
       ) : (
         <TableWrap>
           <table className="data">
             <thead>
               <tr>
-                <th>Reason</th>
-                <th>Code</th>
-                <th className="num">Events</th>
+                <th>{t.quality.reason}</th>
+                <th>{t.quality.code}</th>
+                <th className="num">{t.events.events}</th>
               </tr>
             </thead>
             <tbody>
@@ -49,7 +40,7 @@ export function DataQuality({ report }: { report: AnalyticsResponse }) {
                 <tr key={reason}>
                   <td>{reasonLabel(reason)}</td>
                   <td className="mono">{reason}</td>
-                  <td className="num">{formatCount(count)}</td>
+                  <td className="num">{f.count(count)}</td>
                 </tr>
               ))}
             </tbody>
