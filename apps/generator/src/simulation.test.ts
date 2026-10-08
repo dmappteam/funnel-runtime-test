@@ -154,6 +154,23 @@ describe('virtual user', () => {
     }
   });
 
+  it('sends recommendation_expanded only when the CTA expands a non-empty recommendation list, like the web runtime', async () => {
+    const config = loadConfig(3);
+    config.results.async_native.cta.action = 'book_call';
+    config.results.balanced.recommendations = [];
+    for (const variant of Object.values(config.experiment.variants)) delete variant.resultOverrides.async_native;
+    const run = await runFake({ sessions: 150 }, { configs: [JSON.stringify(config)] });
+
+    const clicked = run.simulation.records.filter((r) => r.ctaClicked);
+    for (const record of clicked) {
+      const expands = record.resultId !== 'async_native' && record.resultId !== 'balanced';
+      expect(record.events.filter((e) => e.name === 'recommendation_expanded'), record.resultId!).toHaveLength(expands ? 1 : 0);
+    }
+    const results = new Set(clicked.map((r) => r.resultId));
+    for (const id of ['async_native', 'balanced', 'office_core']) expect(results).toContain(id);
+    expect(run.report.ok).toBe(true);
+  });
+
   it('covers the branches and results of v3, compliance included', async () => {
     const run = await runFake({ sessions: 200 }, { configs: [rawConfig(3)] });
     const records = run.simulation.records;

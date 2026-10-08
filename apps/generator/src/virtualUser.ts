@@ -29,6 +29,9 @@ import { BEHAVIOUR, WORK_MODES, answerFor, ctaChance, invalidAttempt, leaveChanc
 import type { Outbox } from './outbox';
 import type { Rng } from './random';
 
+/** The CTA action that expands the recommendations, `EXPAND_ACTION` of the web runtime's ResultStep. */
+const EXPAND_ACTION = 'expand_recommendation';
+
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
@@ -325,10 +328,14 @@ export class VirtualUser {
     this.s.clock.act();
     this.emit(resultViewed(resultStep, res.resultId));
     if (this.plan.cta ?? this.s.rng.chance(ctaChance(this.funnel!.variant))) {
+      const { cta, recommendations } = res.result;
       this.s.clock.act();
-      this.emit(ctaClicked(resultStep, res.resultId, res.result.cta.action));
-      // Dropped by finalizeEvent for versions that do not allow it.
-      this.emit(recommendationExpanded(resultStep, res.resultId, res.result.cta.action));
+      this.emit(ctaClicked(resultStep, res.resultId, cta.action));
+      // Like the web runtime: only an expand CTA with at least one recommendation expands the list.
+      // finalizeEvent drops the event for versions that do not allow it.
+      if (cta.action === EXPAND_ACTION && recommendations.length > 0) {
+        this.emit(recommendationExpanded(resultStep, res.resultId, cta.action));
+      }
       this.record.ctaClicked = true;
     }
     this.end('completed');
