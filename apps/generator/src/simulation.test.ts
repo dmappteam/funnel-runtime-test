@@ -3,6 +3,7 @@ import { computePath, resolveVariant } from '@funnel/engine';
 import { loadConfig } from '@funnel/engine/testing';
 import { ClientEventSchema, type ClientEvent } from '@funnel/contracts';
 import type { Fault } from './fakeServer';
+import { NO_CHAOS } from './outbox';
 import { rawConfig, runFake, type FakeRun } from './testing';
 import type { HttpRequest } from './transport';
 import type { SessionRecord } from './virtualUser';
@@ -78,6 +79,16 @@ describe('events', () => {
     }
     // Stored exactly once: one row per unique valid event plus the server's session_started rows.
     expect(run.server.events.size).toBe(run.report.events.uniqueValid + run.report.groundTruth.sessions);
+  });
+
+  it('a re-sent invalid event is answered rejected each time but logged once, like the server does', async () => {
+    const run = await runFake({ sessions: 10, chaos: { ...NO_CHAOS, resend: 1, invalid: 0.2 } });
+    const { invalidEvents, invalidSends } = run.report.events;
+    expect(invalidEvents).toBeGreaterThan(0);
+    expect(invalidSends).toBe(2 * invalidEvents);
+    expect(run.report.responses.rejected).toBe(invalidSends);
+    expect(run.report.verification.rejectedLogDelta).toBe(invalidEvents);
+    expect(run.report.ok).toBe(true);
   });
 
   it('retries lost and failed requests with the same payload and still stores every event once', async () => {

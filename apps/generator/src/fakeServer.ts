@@ -221,7 +221,9 @@ export class FakeServer implements Transport {
     const parsed = ClientEventSchema.safeParse(raw);
     const rawId = (raw as { event_id?: unknown })?.event_id;
     const reject = (reason: RejectReason, eventId: string | null) => {
-      this.rejected.push({ eventId, reason });
+      // Like the server: a re-sent invalid event is logged once per reason, an item without an id every time.
+      const logged = eventId ? this.rejected.some((r) => r.eventId === eventId && r.reason === reason) : false;
+      if (!logged) this.rejected.push({ eventId, reason });
       return { event_id: eventId, status: 'rejected' as const, reason };
     };
     if (!parsed.success) return reject('invalid_payload', typeof rawId === 'string' ? rawId : null);

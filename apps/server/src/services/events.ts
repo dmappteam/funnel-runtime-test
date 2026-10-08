@@ -13,6 +13,7 @@ import type { Db } from '../db';
 import { isExpired, type SessionRow, type SessionService } from './sessions';
 
 const MAX_REJECTED_PAYLOAD = 10 * 1024;
+const MAX_REJECTED_ID = 128;
 
 interface SessionContext {
   row: SessionRow;
@@ -45,6 +46,9 @@ function prepareStatements(db: Db) {
       `INSERT INTO rejected_events (event_id, session_id, reason, message, payload_json, received_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ),
+    rejectedBefore: db
+      .prepare<[string, RejectReason], number>('SELECT 1 FROM rejected_events WHERE event_id = ? AND reason = ? LIMIT 1')
+      .pluck(),
   };
 }
 
@@ -75,15 +79,17 @@ export class EventService {
           const check = this.check(item, contexts);
           if (!check.ok) {
             const eventId = stringField(item, 'event_id');
-            const payload = JSON.stringify(item) ?? 'null';
-            this.stmt.insertRejected.run(
-              eventId?.slice(0, 128) ?? null,
-              stringField(item, 'session_id')?.slice(0, 128) ?? null,
-              check.reason,
-              check.message,
-              payload.slice(0, MAX_REJECTED_PAYLOAD),
-              serverTs,
-            );
+            if (!this.isLogged(eventId, check.reason)) {
+              const payload = JSON.stringify(item) ?? 'null';
+              this.stmt.insertRejected.run(
+                eventId?.slice(0, MAX_REJECTED_ID) ?? null,
+                stringField(item, 'session_id')?.slice(0, MAX_REJECTED_ID) ?? null,
+                check.reason,
+                check.message,
+                payload.slice(0, MAX_REJECTED_PAYLOAD),
+                serverTs,
+              );
+            }
             response.rejected += 1;
             response.results.push({ index, event_id: eventId, status: 'rejected', reason: check.reason, message: check.message });
             return;
@@ -122,6 +128,15 @@ export class EventService {
         return response;
       })
       .immediate();
+  }
+
+  /**
+   * A re-sent invalid event (a beacon and a later flush, a retried batch) is logged once per reason, so the dead-letter
+   * stats count events, not sends. An item without an id that is stored intact cannot be matched and is logged every time.
+   */
+  private isLogged(eventId: string | null, reason: RejectReason): boolean {
+    if (eventId === null || eventId.length === 0 || eventId.length > MAX_REJECTED_ID) return false;
+    return this.stmt.rejectedBefore.get(eventId, reason) !== undefined;
   }
 
   /** The checks run in this order and the first failure is the reason. */

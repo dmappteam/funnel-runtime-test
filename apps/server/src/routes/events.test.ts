@@ -78,6 +78,35 @@ describe('Mandatory #3: deduplication', () => {
     expect(clientEventCount()).toBe(4);
   });
 
+  it('logs a re-sent invalid event once per reason and still answers rejected every time', async () => {
+    const { sessionId } = await startOnV1();
+    const invalid = { event_id: randomUUID(), session_id: sessionId, name: 'step_viewed', step_id: 'intro' };
+    const noId = { session_id: sessionId, name: 'step_viewed', step_id: 'intro' };
+
+    // A beacon and the later flush carry the same event, and the generator re-sends whole batches.
+    const first = await postEvents(ctx.app, [invalid, invalid, noId]);
+    const second = await postEvents(ctx.app, [invalid, noId]);
+    expect(first.data).toMatchObject({ accepted: 0, duplicates: 0, rejected: 3 });
+    expect(second.data).toMatchObject({ accepted: 0, duplicates: 0, rejected: 2 });
+    expect(second.data.results).toEqual([
+      expect.objectContaining({ event_id: invalid.event_id, status: 'rejected', reason: 'invalid_payload' }),
+      expect.objectContaining({ event_id: null, status: 'rejected', reason: 'invalid_payload' }),
+    ]);
+    // The same id failing for another reason is a new entry.
+    const unknownSession = clientEvent(ctx.clock, randomUUID(), { name: 'step_viewed', step_id: 'intro', event_id: invalid.event_id });
+    await postEvents(ctx.app, [unknownSession]);
+
+    expect(ctx.db.prepare('SELECT event_id, reason FROM rejected_events ORDER BY id').all()).toEqual([
+      { event_id: invalid.event_id, reason: 'invalid_payload' },
+      { event_id: null, reason: 'invalid_payload' },
+      { event_id: null, reason: 'invalid_payload' },
+      { event_id: invalid.event_id, reason: 'unknown_session' },
+    ]);
+    expect(ctx.db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'rejected_events'").pluck().all()).toEqual([
+      'idx_rejected_events_event_id',
+    ]);
+  });
+
   it('marks the second copy of an event id within one batch as duplicate', async () => {
     const { sessionId } = await startOnV1();
     const event = clientEvent(ctx.clock, sessionId, { name: 'step_viewed', step_id: 'intro' });
