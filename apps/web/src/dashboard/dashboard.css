@@ -1,0 +1,363 @@
+/* Analytics dashboard. Builds on the tokens and internal-page classes of styles.css. */
+
+.dash-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 16px;
+}
+.dash-header h1 {
+  font-size: 26px;
+}
+
+/* Filters: one row above everything they scope. */
+.dash-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  padding: 12px 16px;
+}
+.dash-field {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.dash-field select {
+  min-height: 34px;
+  min-width: 9em;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.dash-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.dash-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.dash-generated {
+  align-self: center;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.dash-banner {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 14px;
+}
+
+/* Refetch keeps the previous render, dimmed, so nothing jumps. */
+.dash-content {
+  transition: opacity 0.15s var(--ease);
+}
+.dash-stale {
+  opacity: 0.55;
+}
+
+.dash-section {
+  margin-top: 32px;
+}
+.dash-section > h2 {
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+.dash-lead {
+  max-width: 90ch;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.dash-lead strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.dash-note {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.dash-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 16px;
+}
+.dash-grid-2 + .dash-grid-2 {
+  margin-top: 16px;
+}
+
+.dash-card {
+  min-width: 0;
+  padding: 16px;
+}
+.dash-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.dash-card-title {
+  font-weight: 600;
+}
+
+/* Variant identity: a swatch beside the name. Text keeps the text colors. */
+.dash-tone-a {
+  --tone: var(--variant-a);
+}
+.dash-tone-b {
+  --tone: var(--variant-b);
+}
+.dash-tone-other {
+  --tone: var(--text-faint);
+}
+.dash-variant {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dash-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--tone);
+}
+
+/* Stat tiles */
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.dash-tiles-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+.dash-tile {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.dash-tile-primary {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--tone, var(--accent));
+}
+.dash-tile-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dash-tile-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.dash-tile-detail {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* Verdict on the primary metric */
+.dash-verdict-title {
+  font-weight: 600;
+}
+.dash-verdict-diff {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.dash-verdict-text {
+  margin: 8px 0 16px;
+  font-size: 14px;
+}
+.dash-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.dash-facts > div {
+  min-width: 0;
+}
+.dash-facts > div:last-child {
+  grid-column: 1 / -1;
+}
+.dash-facts dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dash-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+.dash-facts-note {
+  display: block;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* Tables scroll inside their card instead of widening the page. */
+.dash-table-wrap {
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-x: auto;
+}
+.dash-funnel {
+  min-width: 520px;
+}
+.dash-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 500;
+}
+.dash-step-pos {
+  min-width: 1.5em;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: right;
+}
+.dash-step-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0 calc(1.5em + 8px);
+}
+.dash-worst td {
+  background: var(--danger-soft);
+}
+.dash-worst-badge {
+  margin-left: 6px;
+}
+.dash-selected td {
+  background: var(--accent-soft);
+}
+.dash-th-group {
+  text-align: center;
+}
+.dash-nowrap {
+  white-space: nowrap;
+}
+
+/* Bars: a thin fill on a lighter track of the same hue. */
+.dash-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+}
+.dash-bar {
+  display: block;
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone, var(--accent)) 16%, transparent);
+}
+.dash-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tone, var(--accent));
+}
+.dash-bar-value {
+  min-width: 4.5em;
+  font-size: 13px;
+  text-align: right;
+}
+
+.dash-results {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-results li {
+  display: grid;
+  grid-template-columns: minmax(0, 11em) minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.dash-result-id {
+  overflow-wrap: anywhere;
+}
+.dash-result-value {
+  min-width: 6.5em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Loading, empty and error states */
+.dash-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 24px;
+  text-align: center;
+}
+.dash-state h2 {
+  font-size: 18px;
+}
+.dash-state code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+@media (max-width: 640px) {
+  .dash-header h1 {
+    font-size: 22px;
+  }
+  .dash-tiles,
+  .dash-tiles-4,
+  .dash-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-generated {
+    margin-left: 0;
+  }
+  .dash-verdict-diff {
+    font-size: 32px;
+  }
+  .dash-results li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .dash-results .dash-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

@@ -88,6 +88,30 @@ describe('Mandatory #9: basic auth', () => {
   });
 });
 
+describe('cross-site guard', () => {
+  it('rejects mutating admin requests started by another site, even with valid credentials', async () => {
+    ctx = await createTestApp({ adminAuth: ADMIN });
+    await release(ctx.app, 1, admin);
+    const url = `/api/admin/funnels/${FUNNEL_ID}/rollback`;
+    for (const site of ['cross-site', 'same-site']) {
+      const res = await ctx.app.inject({ method: 'POST', url, headers: { ...admin, 'sec-fetch-site': site } });
+      expect(res.statusCode, site).toBe(403);
+      expect(res.json<ApiError>().error).toBe('forbidden');
+    }
+    // Same-origin pages and non-browser clients pass; the rollback then fails only because there is one version.
+    for (const headers of [{ ...admin, 'sec-fetch-site': 'same-origin' }, admin]) {
+      expect((await ctx.app.inject({ method: 'POST', url, headers })).statusCode).toBe(409);
+    }
+    // Reads stay available, e.g. a dashboard link opened from a chat.
+    const read = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/admin/funnels/${FUNNEL_ID}`,
+      headers: { ...admin, 'sec-fetch-site': 'cross-site' },
+    });
+    expect(read.statusCode).toBe(200);
+  });
+});
+
 describe('checkBasicAuth', () => {
   const header = (value: string) => `Basic ${Buffer.from(value).toString('base64')}`;
 
