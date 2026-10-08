@@ -397,4 +397,20 @@ describe('funnel page', () => {
     expect(sessionIdOf()).toBe(restarted);
     expect(server.requests.filter((r) => r.method === 'PUT' && /sessions\/[^/]+$/.test(r.path))).toHaveLength(1);
   });
+
+  it('starts a new session when the result request finds no session, as after a deploy on a fresh database', async () => {
+    const sessionId = '6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
+    server.create(sessionId, 'B', { answers: COMPLETE, currentStepId: 'result', rev: 8 });
+    window.localStorage.setItem(SESSION_KEY, sessionId);
+    vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+      if (input.endsWith('/result')) server.sessions.delete(sessionId); // the database was replaced after the page loaded
+      return server.fetch(input, init);
+    });
+
+    await open('/');
+    await waitForHeading('Is your team losing time to the way it works?');
+    expect(document.querySelector('.fn-toast')?.textContent).toBe(EXPIRED_NOTICE);
+    expect(sessionIdOf()).not.toBe(sessionId);
+    expect(server.requests.filter((r) => r.path.endsWith('/result'))).toHaveLength(1);
+  });
 });

@@ -1,7 +1,7 @@
 import type { SaveStateRequest, SaveStateResponse, SessionState } from '@funnel/contracts';
 import type { Answers } from '@funnel/engine';
 import { HttpError } from '../api/http';
-import { saveState } from '../api/sessions';
+import { isSessionGone, saveState } from '../api/sessions';
 import { backoffDelay, isRetryableStatus } from '../tracking/backoff';
 
 export interface Snapshot {
@@ -14,6 +14,7 @@ export interface StateSyncOptions {
   rev: number;
   /** The server holds different answers, e.g. another tab moved on. The runtime adopts them. */
   onConflict: (state: SessionState) => void;
+  /** The session expired or no longer exists (`isSessionGone`). The runtime starts a new one. */
   onExpired: () => void;
   save?: (sessionId: string, body: SaveStateRequest) => Promise<SaveStateResponse>;
   random?: () => number;
@@ -98,7 +99,7 @@ export function createStateSync(options: StateSyncOptions): StateSync {
           timer = null;
           kick();
         }, backoffDelay(failures++, random));
-      } else if (err.status === 410) {
+      } else if (isSessionGone(err)) {
         stopped = true;
         options.onExpired();
       } else {

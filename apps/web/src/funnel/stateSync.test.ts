@@ -157,10 +157,13 @@ describe('state sync', () => {
     });
   });
 
-  it('stops and reports an expired session', async () => {
+  it.each([
+    ['an expired session', new HttpError(410, { error: 'session_expired', message: 'Session expired' })],
+    ['a session the server does not know', new HttpError(404, { error: 'not_found', message: 'Session does not exist' })],
+  ])('stops and reports %s', async (_case, error) => {
     const { sync, calls, onExpired } = setup();
     sync.save({ answers: {}, currentStepId: 'intro' });
-    calls[0]!.fail(new HttpError(410, { error: 'session_expired', message: 'Session expired' }));
+    calls[0]!.fail(error);
     await settle();
     expect(onExpired).toHaveBeenCalledTimes(1);
     sync.save({ answers: {}, currentStepId: 'work_mode' });

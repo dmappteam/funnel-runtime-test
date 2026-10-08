@@ -6,9 +6,14 @@ import type {
   SessionResponse,
 } from '@funnel/contracts';
 import type { Answers } from '@funnel/engine';
-import { http } from './http';
+import { HttpError, http } from './http';
 
 const sessionUrl = (sessionId: string) => `/api/sessions/${encodeURIComponent(sessionId)}`;
+
+/** The session cannot be continued: it expired (410) or the server does not know it (404, e.g. a fresh database after a deploy). */
+export function isSessionGone(err: unknown): boolean {
+  return err instanceof HttpError && (err.status === 410 || err.status === 404);
+}
 
 export function getSession(sessionId: string): Promise<SessionResponse> {
   return http<SessionResponse>('GET', sessionUrl(sessionId));

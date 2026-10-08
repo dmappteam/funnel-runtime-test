@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ctaClicked, recommendationExpanded, resultStepId, resultViewed, type ResultResponse } from '@funnel/contracts';
 import type { ResolvedFunnel, ResultDef, ResultStep as ResultStepDef } from '@funnel/engine';
 import { HttpError } from '../../api/http';
+import { isSessionGone } from '../../api/sessions';
 import type { Tracker } from '../../tracking/tracker';
 import type { Strings } from '../i18n';
 import { ActionBar } from '../ui/ActionBar';
@@ -24,6 +25,7 @@ interface ResultStepProps {
   load: () => Promise<ResultResponse>;
   /** The server is missing answers: the runtime takes the user to the first missing question. */
   onIncomplete: (missingStepIds: string[]) => void;
+  /** The session expired or no longer exists: retrying cannot help, the runtime starts a new one. */
   onExpired: () => void;
 }
 
@@ -60,7 +62,7 @@ export function ResultStep({ step, funnel, strings, tracker, load, onIncomplete,
       },
       (err: unknown) => {
         if (!alive) return;
-        if (err instanceof HttpError && err.status === 410) return onExpired();
+        if (isSessionGone(err)) return onExpired();
         const missing = missingSteps(err);
         if (missing.length > 0) return onIncomplete(missing);
         setState({ status: 'error' });
