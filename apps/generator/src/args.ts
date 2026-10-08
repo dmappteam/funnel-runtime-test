@@ -28,11 +28,13 @@ Options:
   --seed <n>               Random seed: the same seed replays the same users (default 42)
   --concurrency <n>        Sessions in flight (default 8)
   --scenario <name>        generate | demo | iteration2 (default generate)
-  --admin-user <user>      Basic auth user for admin and analytics (default $ADMIN_USER)
-  --admin-password <pw>    Basic auth password (default $ADMIN_PASSWORD)
+  --admin-user <user>      Basic auth user for admin and analytics (default $ADMIN_USER, then admin)
+  --admin-password <pw>    Basic auth password (default $ADMIN_PASSWORD). Without it the admin API
+                           is still tried, for a server started without ADMIN_PASSWORD
   --configs-dir <dir>      Directory with funnel-v2.json and funnel-v3.json (default <repo>/configs)
   --report <file>          Write the full JSON report to this file
-  --no-verify              Skip the checks against POST /api/events answers and GET /api/analytics
+  --no-verify              Skip the comparison with GET /api/analytics (the answers of
+                           POST /api/events are still checked)
   -h, --help               Show this help
 
 Scenarios:
@@ -68,8 +70,9 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
 
   const scenario = values.scenario as ScenarioName;
   if (!SCENARIOS.includes(scenario)) throw new Error(`--scenario must be one of ${SCENARIOS.join(', ')}, got "${values.scenario}"`);
-  const user = values['admin-user'] ?? env.ADMIN_USER;
-  const password = values['admin-password'] ?? env.ADMIN_PASSWORD;
+  // Same defaults as the server: the user is `admin` unless set.
+  const user = values['admin-user'] || env.ADMIN_USER || 'admin';
+  const password = values['admin-password'] || env.ADMIN_PASSWORD;
 
   return {
     url: values.url.replace(/\/+$/, ''),
@@ -77,7 +80,7 @@ export function parseCliArgs(argv: string[], env: Record<string, string | undefi
     seed: integer('--seed', values.seed, Number.MIN_SAFE_INTEGER),
     concurrency: integer('--concurrency', values.concurrency, 1),
     scenario,
-    admin: user && password ? { user, password } : undefined,
+    admin: password ? { user, password } : undefined,
     configsDir: resolve(values['configs-dir'] ?? defaultConfigsDir),
     report: values.report,
     verify: values.verify,

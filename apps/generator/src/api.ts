@@ -66,22 +66,23 @@ export class ApiClient {
     private readonly options: ApiClientOptions = {},
   ) {}
 
-  get hasAdmin(): boolean {
+  get hasCredentials(): boolean {
     return this.options.admin !== undefined;
   }
 
   /** One attempt without retries: any HTTP answer means the server is up. */
   async ping(): Promise<void> {
     try {
-      await this.transport.send({ method: 'GET', path: '/api/sessions/00000000-0000-4000-8000-000000000000' });
+      await this.transport.send({ method: 'GET', path: '/api/health' });
     } catch (err) {
       if (err instanceof NetworkError) throw this.unreachable(err);
       throw err;
     }
   }
 
-  async createSession(sessionId: string, body: CreateSessionRequest): Promise<SessionResponse> {
-    return (await this.request<SessionResponse>('PUT', `/api/sessions/${sessionId}`, body, 'PUT /api/sessions/:id')).body;
+  async createSession(funnelId: string, sessionId: string, body: CreateSessionRequest): Promise<SessionResponse> {
+    const path = `/api/sessions/${sessionId}?${new URLSearchParams({ funnelId })}`;
+    return (await this.request<SessionResponse>('PUT', path, body, 'PUT /api/sessions/:id')).body;
   }
 
   async getSession(sessionId: string): Promise<SessionResponse> {
@@ -139,18 +140,12 @@ export class ApiClient {
     const request: HttpRequest = {
       method,
       path,
-      headers: admin ? this.authHeader() : undefined,
+      headers: admin && this.options.admin ? basicAuth(this.options.admin) : undefined,
       body: body === undefined || typeof body === 'string' ? body : JSON.stringify(body),
     };
     const { response, attempts } = await this.withRetries(request);
     if (response.status >= 200 && response.status < 300) return { status: response.status, body: response.body as T, attempts };
     throw new HttpError(response.status, asApiError(response.body), what);
-  }
-
-  private authHeader(): Record<string, string> {
-    const admin = this.options.admin;
-    if (!admin) throw new Error('Admin credentials are required: --admin-user/--admin-password or ADMIN_USER/ADMIN_PASSWORD');
-    return { authorization: `Basic ${Buffer.from(`${admin.user}:${admin.password}`).toString('base64')}` };
   }
 
   private async withRetries(request: HttpRequest): Promise<{ response: HttpResponse; attempts: number }> {
@@ -177,6 +172,10 @@ export class ApiClient {
       `Cannot reach ${url}: ${err.message}. Start the server (npm run dev) or pass --url.`,
     );
   }
+}
+
+export function basicAuth({ user, password }: AdminCredentials): Record<string, string> {
+  return { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` };
 }
 
 function asApiError(body: unknown): ApiError | null {

@@ -1,10 +1,14 @@
 import {
   FunnelConfigSchema,
   getMissingStepIds,
+  hasInput,
   pickVariant,
   resolveResult,
   resolveVariant,
+  validateAnswer,
+  type Answers,
   type FunnelConfig,
+  type InputStep,
   type ResolvedFunnel,
 } from '@funnel/engine';
 import {
@@ -103,6 +107,7 @@ export class FakeServer implements Transport {
     const body: unknown = req.body === undefined ? undefined : JSON.parse(req.body);
     let m: RegExpMatchArray | null;
 
+    if (path === '/api/health') return ok(200, { ok: true });
     if ((m = path.match(/^\/api\/sessions\/([^/]+)$/))) {
       return req.method === 'PUT' ? this.createSession(m[1]!, body) : this.getSession(m[1]!);
     }
@@ -175,9 +180,11 @@ export class FakeServer implements Transport {
     if (!session) return fail(404, 'not_found', 'unknown session');
     const parsed = SaveStateRequestSchema.safeParse(body);
     if (!parsed.success) return fail(400, 'bad_request', parsed.error.message);
+    if (!session.funnel.sequence.includes(parsed.data.currentStepId)) return fail(400, 'bad_request', 'unknown step');
+    const answers = checkAnswers(session.funnel, parsed.data.answers);
+    if (!answers) return fail(422, 'invalid_answers', 'Some answers are invalid');
     if (parsed.data.rev !== session.state.rev) return fail(409, 'rev_conflict', 'stale rev', { state: session.state });
-    if (!session.funnel.steps[parsed.data.currentStepId]) return fail(400, 'bad_request', 'unknown step');
-    session.state = { answers: parsed.data.answers, currentStepId: parsed.data.currentStepId, rev: session.state.rev + 1 };
+    session.state = { answers, currentStepId: parsed.data.currentStepId, rev: session.state.rev + 1 };
     return ok(200, { state: session.state });
   }
 
@@ -186,11 +193,13 @@ export class FakeServer implements Transport {
     if (!session) return fail(404, 'not_found', 'unknown session');
     const parsed = ResultRequestSchema.safeParse(body);
     if (!parsed.success) return fail(400, 'bad_request', parsed.error.message);
-    const missingStepIds = getMissingStepIds(session.funnel, parsed.data.answers);
+    const answers = checkAnswers(session.funnel, parsed.data.answers);
+    if (!answers) return fail(422, 'invalid_answers', 'Some answers are invalid');
+    const missingStepIds = getMissingStepIds(session.funnel, answers);
     if (missingStepIds.length > 0) return fail(409, 'incomplete', 'unanswered questions', { missingStepIds });
-    const { resultId, result } = resolveResult(session.funnel, parsed.data.answers);
+    const { resultId, result } = resolveResult(session.funnel, answers);
     session.info.resultId = resultId;
-    session.state = { answers: parsed.data.answers, currentStepId: resultStepId(session.funnel), rev: session.state.rev + 1 };
+    session.state = { answers, currentStepId: resultStepId(session.funnel), rev: session.state.rev + 1 };
     return ok(200, { resultId, result, state: session.state });
   }
 
@@ -217,13 +226,14 @@ export class FakeServer implements Transport {
     };
     if (!parsed.success) return reject('invalid_payload', typeof rawId === 'string' ? rawId : null);
     const e = parsed.data;
+    if (SERVER_ONLY_EVENTS.includes(e.name)) return reject('server_only_event', e.event_id);
     const session = this.sessions.get(e.session_id);
     if (!session) return reject('unknown_session', e.event_id);
-    if (SERVER_ONLY_EVENTS.includes(e.name)) return reject('server_only_event', e.event_id);
     const def = session.funnel.events.allowed.find((d) => d.name === e.name);
     if (!def) return reject('event_not_allowed', e.event_id);
     const inVariant = (stepId: unknown) => typeof stepId === 'string' && session.funnel.sequence.includes(stepId);
-    if (e.step_id !== null && !inVariant(e.step_id)) return reject('unknown_step', e.event_id);
+    // Every client event belongs to a step.
+    if (!inVariant(e.step_id)) return reject('unknown_step', e.event_id);
 
     const properties: Record<string, unknown> = {};
     for (const key of def.properties) {
@@ -312,7 +322,7 @@ export class FakeServer implements Transport {
     const parsed = PublishRequestSchema.safeParse(body);
     if (!parsed.success || !this.configs.has(parsed.data.version)) return fail(404, 'not_found', 'unknown version');
     const previousVersion = this.activeVersion;
-    this.releases.push(parsed.data.version);
+    if (previousVersion !== parsed.data.version) this.releases.push(parsed.data.version);
     return ok(200, { activeVersion: parsed.data.version, previousVersion });
   }
 
@@ -361,6 +371,23 @@ export class FakeServer implements Transport {
     this.options.tamperAnalytics?.(body);
     return ok(200, body);
   }
+}
+
+/** Like the server: every answer must belong to a question of the variant and pass its validation. Normalized, or `null`. */
+function checkAnswers(funnel: ResolvedFunnel, answers: Answers): Answers | null {
+  const steps = new Map<string, InputStep>();
+  for (const id of funnel.sequence) {
+    const step = funnel.steps[id];
+    if (step && hasInput(step)) steps.set(step.input.name, step);
+  }
+  const normalized: Answers = {};
+  for (const [name, value] of Object.entries(answers)) {
+    const step = steps.get(name);
+    const check = step ? validateAnswer(step, value) : null;
+    if (!check?.ok) return null;
+    normalized[name] = check.value;
+  }
+  return normalized;
 }
 
 function ok(status: number, body: unknown): HttpResponse {

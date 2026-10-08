@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FunnelAdminResponse } from '@funnel/contracts';
 import type { ResolvedFunnel } from '@funnel/engine';
-import { ApiClient, FUNNEL_ID, type AdminCredentials } from './api';
+import { ApiClient, FUNNEL_ID, HttpError, type AdminCredentials } from './api';
 import { midFunnelStep } from './behaviour';
 import { computeGroundTruth, type GroundTruth } from './groundTruth';
 import type { IngestionCheck, IngestionTotals } from './ingestion';
@@ -56,7 +56,8 @@ export interface Assertion {
 }
 
 export interface Verification {
-  status: 'ok' | 'mismatch' | 'skipped';
+  /** `error`: GET /api/analytics failed after the run. */
+  status: 'ok' | 'mismatch' | 'error' | 'skipped';
   reason?: string;
   versions: number[];
   checks: MetricCheck[];
@@ -118,6 +119,8 @@ class Run {
   private readonly log: Logger;
   private readonly assertions: Assertion[] = [];
   private before: AnalyticsCounts = { groups: new Map(), rejected: null };
+  /** The admin API answered, so GET /api/analytics can be read too. */
+  private adminAccess = false;
   private readonly startedAt = new Date();
 
   constructor(private readonly o: RunOptions) {
@@ -199,21 +202,26 @@ class Run {
   // Steps
   // -------------------------------------------------------------------------
 
+  /** Without credentials the admin API is still tried: a server started without ADMIN_PASSWORD leaves it open. */
   private async serverCheck(): Promise<FunnelAdminResponse | null> {
     this.log.step('Server check');
     await this.api.ping();
     this.log.info(`${this.o.url} answers`);
-    if (!this.api.hasAdmin) {
+    let admin: FunnelAdminResponse;
+    try {
+      admin = await this.api.getFunnel(FUNNEL_ID);
+    } catch (err) {
+      if (!(err instanceof HttpError && err.status === 401)) throw err;
+      if (this.api.hasCredentials) throw new ScenarioError('The server rejected the admin credentials (HTTP 401).');
       if (this.o.scenario !== 'generate') {
         throw new ScenarioError(
-          `The ${this.o.scenario} scenario publishes versions and needs admin credentials: ` +
-            '--admin-user/--admin-password or ADMIN_USER/ADMIN_PASSWORD.',
+          `The ${this.o.scenario} scenario publishes versions and needs admin credentials: --admin-password or ADMIN_PASSWORD.`,
         );
       }
-      this.log.warn('no admin credentials (ADMIN_USER/ADMIN_PASSWORD): GET /api/analytics is out of reach, verification will be skipped');
+      this.log.warn('no admin credentials (--admin-password or ADMIN_PASSWORD): GET /api/analytics is out of reach, verification will be skipped');
       return null;
     }
-    const admin = await this.api.getFunnel(FUNNEL_ID);
+    this.adminAccess = true;
     const stored = admin.versions.map((v) => `v${v.version}`).join(', ') || 'none';
     this.log.info(`${FUNNEL_ID}: active ${admin.activeVersion === null ? 'none' : `v${admin.activeVersion}`}, stored ${stored}`);
     const required = REQUIRED_ACTIVE[this.o.scenario];
@@ -226,11 +234,16 @@ class Run {
     return admin;
   }
 
-  /** Analytics may already hold data, so the verification compares deltas. */
+  /** Analytics may already hold data, so the verification compares deltas. Without a snapshot there is nothing to verify, so a failure stops the run. */
   private async snapshot(admin: FunnelAdminResponse): Promise<void> {
     this.log.step('Analytics snapshot before the run');
     const versions = admin.versions.map((v) => v.version);
-    this.before = await fetchCounts(this.api, FUNNEL_ID, versions);
+    try {
+      this.before = await fetchCounts(this.api, FUNNEL_ID, versions);
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      throw new ScenarioError(`${err.message}. Fix the analytics API or run with --no-verify to send traffic without verification.`);
+    }
     for (const version of versions) {
       const started = [...this.before.groups.entries()]
         .filter(([key]) => key.startsWith(`${version}:`))
@@ -340,7 +353,8 @@ class Run {
     this.log.section('Events sent');
     this.log.lines(eventLines(totals, ingestion, this.api.stats.retries));
 
-    const ingestionChecks = this.o.verify ? ingestion.checks() : [];
+    // Needs nothing but the batch answers, so it runs even with --no-verify.
+    const ingestionChecks = ingestion.checks();
     this.log.section('Server answers to POST /api/events');
     this.log.lines(ingestionLines(ingestion, ingestionChecks));
 
@@ -350,6 +364,7 @@ class Run {
       ...this.assertions.map((a) => a.ok),
       ...ingestionChecks.map((c) => c.ok),
       ...verification.checks.map((c) => c.ok),
+      ...(verification.status === 'error' ? [false] : []),
       failed === 0,
     ];
     const failures = checks.filter((ok) => !ok).length;
@@ -393,11 +408,18 @@ class Run {
       this.log.info('skipped (--no-verify)');
       return skipped('--no-verify');
     }
-    if (!this.api.hasAdmin) {
-      this.log.warn('skipped: no admin credentials (ADMIN_USER/ADMIN_PASSWORD)');
+    if (!this.adminAccess) {
+      this.log.warn('skipped: no admin credentials (--admin-password or ADMIN_PASSWORD)');
       return skipped('no admin credentials');
     }
-    const after = await fetchCounts(this.api, FUNNEL_ID, versions);
+    let after: AnalyticsCounts;
+    try {
+      after = await fetchCounts(this.api, FUNNEL_ID, versions);
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      this.log.warn(err.message);
+      return { status: 'error', reason: err.message, versions, checks: [], rejectedLogDelta: null };
+    }
     const checks = compareCounts(truth, this.before, after, versions);
     this.log.lines(verificationLines(checks));
     const rejectedLogDelta = after.rejected === null ? null : after.rejected - (this.before.rejected ?? 0);

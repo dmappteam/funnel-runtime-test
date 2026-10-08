@@ -24,7 +24,7 @@ import {
   type EventDraft,
   type SessionResponse,
 } from '@funnel/contracts';
-import { revConflictState, UnreachableError, type ApiClient } from './api';
+import { FUNNEL_ID, UnreachableError, revConflictState, type ApiClient } from './api';
 import { BEHAVIOUR, WORK_MODES, answerFor, ctaChance, invalidAttempt, leaveChance, type SessionPlan } from './behaviour';
 import type { Outbox } from './outbox';
 import type { Rng } from './random';
@@ -159,7 +159,7 @@ export class VirtualUser {
   async start(options: StartOptions = {}): Promise<void> {
     await this.guard(async () => {
       const override = this.plan.variantOverride;
-      const res = await this.api.createSession(this.record.sessionId, {
+      const res = await this.api.createSession(FUNNEL_ID, this.record.sessionId, {
         utm: this.plan.profile.utm,
         ...(override ? { variant: override } : {}),
       });
