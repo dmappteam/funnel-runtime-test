@@ -23,6 +23,7 @@ import { requestResult } from '../api/sessions';
 import type { Tracker } from '../tracking/tracker';
 import { pushStep, readHistoryDepth, replaceStep } from './history';
 import { getStrings } from './i18n';
+import { initialStepId } from './initialStep';
 import { createStateSync, type StateSync } from './stateSync';
 import { InfoStep } from './steps/InfoStep';
 import { MultiSelectStep } from './steps/MultiSelectStep';
@@ -44,7 +45,7 @@ interface View {
 
 export interface FunnelRuntimeProps {
   boot: SessionResponse;
-  /** `?step=` of the landing URL. Honoured only when it is reachable with the stored answers. */
+  /** `?step=` of the landing URL. Honoured only to take a resumed session back to a reachable step (`initialStepId`). */
   requestedStep: string | null;
   tracker: Tracker;
   notice: string | null;
@@ -60,7 +61,7 @@ export function FunnelRuntime({ boot, requestedStep, tracker, notice: initialNot
   const strings = useMemo(() => getStrings(funnel.locale), [funnel.locale]);
   const [answers, setAnswers] = useState<Answers>(boot.state.answers);
   const [view, setView] = useState<View>(() => ({
-    stepId: resolveCurrentStepId(funnel, boot.state.answers, requestedStep ?? boot.state.currentStepId),
+    stepId: initialStepId(boot, requestedStep),
     seq: 0,
     direction: 'none',
   }));
@@ -161,6 +162,16 @@ export function FunnelRuntime({ boot, requestedStep, tracker, notice: initialNot
       onExpired: () => onExpired(session),
     };
   });
+
+  // A pending retry must not outlive the runtime: after a restart it would report the old session as expired again.
+  // The ref is cleared, not kept stopped, so StrictMode's remount creates a new sync on first use.
+  useEffect(
+    () => () => {
+      syncRef.current?.stop();
+      syncRef.current = null;
+    },
+    [],
+  );
 
   // Layout effect: the context must be set before the first step_viewed, which is sent from a passive effect.
   useLayoutEffect(() => {

@@ -13,6 +13,9 @@ const REASONS: Record<RejectReason, string> = {
 
 const reasonLabel = (reason: string) => (Object.hasOwn(REASONS, reason) ? REASONS[reason as RejectReason] : reason);
 
+/** `totals` ignore the version filter: they cover every version in the current campaign. */
+const SCOPE = 'all versions, current campaign';
+
 export function DataQuality({ report }: { report: AnalyticsResponse }) {
   const { totals, filters } = report;
   const ingestion = report.ingestion ?? { rejected: 0, rejectedByReason: {} };
@@ -20,12 +23,12 @@ export function DataQuality({ report }: { report: AnalyticsResponse }) {
   return (
     <div className="card dash-card">
       <div className="dash-tiles dash-tiles-4">
-        <Tile label="Events" value={formatCount(totals.events)} detail="unique event ids, current filters" />
-        <Tile label="Sessions" value={formatCount(totals.sessions)} detail="current filters" />
+        <Tile label="Events" value={formatCount(totals.events)} detail={`unique event ids, ${SCOPE}`} />
+        <Tile label="Sessions" value={formatCount(totals.sessions)} detail={SCOPE} />
         <Tile
           label="QA override sessions"
           value={formatCount(totals.overrideSessions)}
-          detail={filters.includeOverrides ? 'included in the numbers' : 'excluded from the numbers'}
+          detail={`${SCOPE}, ${filters.includeOverrides ? 'included in' : 'excluded from'} the numbers`}
         />
         <Tile label="Rejected events" value={formatCount(ingestion.rejected)} detail="refused at ingestion" />
       </div>

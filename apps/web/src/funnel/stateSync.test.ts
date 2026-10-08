@@ -92,15 +92,100 @@ describe('state sync', () => {
     expect(calls[1]!.body).toEqual({ answers, currentStepId: 'meeting_hours', rev: 3 });
   });
 
-  it('stops and reports an expired session', async () => {
+  describe('after a save whose response was lost', () => {
+    const first = { answers: { work_mode: 'remote' }, currentStepId: 'meeting_hours' };
+    const second = { answers: { work_mode: 'remote', meeting_hours: 4 }, currentStepId: 'timezone_span' };
+    const third = { answers: { work_mode: 'remote', meeting_hours: 4, timezone_span: 'same' }, currentStepId: 'team_size' };
+
+    it('recognizes its own stored save in the conflict and sends the newer snapshot on top of it', async () => {
+      const { sync, calls, onConflict } = setup();
+      sync.save(first);
+      calls[0]!.fail(new TypeError('Failed to fetch')); // the server stored it, the response never arrived
+      await settle();
+      sync.save(second);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls[1]!.body).toEqual({ ...second, rev: 0 });
+
+      calls[1]!.fail(conflict({ ...first, rev: 1 }));
+      await settle();
+      expect(onConflict).not.toHaveBeenCalled();
+      expect(calls[2]!.body).toEqual({ ...second, rev: 1 });
+    });
+
+    it('recognizes it after further failed attempts with newer snapshots', async () => {
+      const { sync, calls, onConflict } = setup();
+      sync.save(first);
+      calls[0]!.fail(new TypeError('Failed to fetch')); // stored
+      await settle();
+      sync.save(second);
+      await vi.advanceTimersByTimeAsync(1000);
+      calls[1]!.fail(new HttpError(503, null)); // not stored
+      await settle();
+      sync.save(third);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      calls[2]!.fail(conflict({ ...first, rev: 1 }));
+      await settle();
+      expect(onConflict).not.toHaveBeenCalled();
+      expect(calls[3]!.body).toEqual({ ...third, rev: 1 });
+    });
+
+    it("still adopts another tab's answers", async () => {
+      const { sync, calls, onConflict } = setup();
+      const other: SessionState = { answers: { work_mode: 'office' }, currentStepId: 'meeting_hours', rev: 1 };
+      sync.save(first);
+      calls[0]!.fail(new TypeError('Failed to fetch')); // not stored
+      await vi.advanceTimersByTimeAsync(1000);
+      calls[1]!.fail(conflict(other));
+      await settle();
+      expect(onConflict).toHaveBeenCalledWith(other);
+      expect(calls).toHaveLength(2);
+    });
+
+    it('forgets the lost save once the server confirms a newer rev', async () => {
+      const { sync, calls, onConflict } = setup();
+      sync.save(first);
+      calls[0]!.fail(new TypeError('Failed to fetch')); // not stored
+      await vi.advanceTimersByTimeAsync(1000);
+      calls[1]!.ok(1);
+      await settle();
+      // Another tab, still on the first state, saves it again: that is its change, not a lost save of this tab.
+      sync.save(second);
+      calls[2]!.fail(conflict({ ...first, rev: 2 }));
+      await settle();
+      expect(onConflict).toHaveBeenCalledWith({ ...first, rev: 2 });
+    });
+  });
+
+  it.each([
+    ['an expired session', new HttpError(410, { error: 'session_expired', message: 'Session expired' })],
+    ['a session the server does not know', new HttpError(404, { error: 'not_found', message: 'Session does not exist' })],
+  ])('stops and reports %s', async (_case, error) => {
     const { sync, calls, onExpired } = setup();
     sync.save({ answers: {}, currentStepId: 'intro' });
-    calls[0]!.fail(new HttpError(410, { error: 'session_expired', message: 'Session expired' }));
+    calls[0]!.fail(error);
     await settle();
     expect(onExpired).toHaveBeenCalledTimes(1);
     sync.save({ answers: {}, currentStepId: 'work_mode' });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    ['an expired session', new HttpError(410, { error: 'session_expired', message: 'Session expired' })],
+    ['a conflict', conflict({ answers: { work_mode: 'office' }, currentStepId: 'meeting_hours', rev: 1 })],
+    ['a network error', new TypeError('Failed to fetch')],
+  ])('ignores %s that arrives after stop()', async (_case, error) => {
+    const { sync, calls, onConflict, onExpired } = setup();
+    sync.save({ answers: { work_mode: 'remote' }, currentStepId: 'meeting_hours' });
+    sync.stop();
+    calls[0]!.fail(error);
+    await settle();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls).toHaveLength(1);
+    expect(onConflict).not.toHaveBeenCalled();
+    expect(onExpired).not.toHaveBeenCalled();
   });
 
   it('runs the result request between saves and continues with its rev', async () => {

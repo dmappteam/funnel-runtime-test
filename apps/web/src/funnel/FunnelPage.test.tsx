@@ -12,6 +12,17 @@ import { SESSION_KEY } from './sessionStore';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const config = FunnelConfigSchema.parse(v3);
+/** Every question of variant B answered: Continue on office_days opens the result. */
+const COMPLETE: Answers = {
+  work_mode: 'hybrid',
+  meeting_hours: 6,
+  timezone_span: 'same',
+  team_size: 8,
+  async_maturity: 'medium',
+  priorities: ['speed', 'focus'],
+  office_days: 2,
+};
+const EXPIRED_NOTICE = 'Your previous session expired, so we started a new one.';
 
 interface StoredSession {
   info: SessionInfo;
@@ -21,6 +32,7 @@ interface StoredSession {
 /** In-memory stand-in for the API with the server's rules: pinned variant, rev check, normalized answers, result rules. */
 function fakeServer() {
   const sessions = new Map<string, StoredSession>();
+  const expired = new Set<string>();
   const events: ClientEvent[] = [];
   const requests: Array<{ method: string; path: string; body: unknown }> = [];
   let failNext = 0;
@@ -84,6 +96,7 @@ function fakeServer() {
     const match = /^\/api\/sessions\/([^/]+)(\/state|\/result)?$/.exec(path);
     if (!match) return reply(404, { error: 'not_found', message: path });
     const [, sessionId, action] = match;
+    if (expired.has(sessionId!)) return reply(410, { error: 'session_expired', message: 'expired' });
     const stored = sessions.get(sessionId!);
 
     if (!action && method === 'PUT') {
@@ -120,6 +133,7 @@ function fakeServer() {
     events,
     requests,
     create,
+    expire: (sessionId: string) => expired.add(sessionId),
     failRequests: (n: number) => {
       failNext = n;
     },
@@ -345,6 +359,14 @@ describe('funnel page', () => {
     expect(sessionIdOf()).toBe(sessionId);
   });
 
+  it('starts a new session at the intro even when the link names a later step', async () => {
+    await open('/?step=work_mode&variant=B');
+    await waitForHeading('Is your team losing time to the way it works?');
+    expect(search()).toBe('?step=intro');
+    await settle(50);
+    expect(eventsOf(sessionIdOf())).toEqual([['step_viewed', 'intro']]);
+  });
+
   it('shows a retryable error and repeats the same session PUT on retry', async () => {
     server.failRequests(1);
     await open('/');
@@ -354,5 +376,41 @@ describe('funnel page', () => {
     const puts = server.requests.filter((r) => r.method === 'PUT' && /sessions\/[^/]+$/.test(r.path));
     expect(puts).toHaveLength(2);
     expect(puts[0]!.path).toBe(puts[1]!.path);
+  });
+
+  it('restarts an expired session once, although a save of the old session still waits for its retry', async () => {
+    const sessionId = '6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
+    server.create(sessionId, 'B', { answers: COMPLETE, currentStepId: 'office_days', rev: 7 });
+    window.localStorage.setItem(SESSION_KEY, sessionId);
+    await open('/');
+    await waitForHeading('How many office days are expected each week?');
+
+    server.expire(sessionId);
+    server.failRequests(1); // the save of the result step gets no response and waits for its retry
+    await click(byText('button', 'Continue'));
+    await waitForHeading('Is your team losing time to the way it works?');
+    expect(document.querySelector('.fn-toast')?.textContent).toBe(EXPIRED_NOTICE);
+    const restarted = sessionIdOf();
+    expect(restarted).not.toBe(sessionId);
+
+    await settle(1300); // past the old save's retry (backoff of at most 1.2 s)
+    expect(sessionIdOf()).toBe(restarted);
+    expect(server.requests.filter((r) => r.method === 'PUT' && /sessions\/[^/]+$/.test(r.path))).toHaveLength(1);
+  });
+
+  it('starts a new session when the result request finds no session, as after a deploy on a fresh database', async () => {
+    const sessionId = '6f1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
+    server.create(sessionId, 'B', { answers: COMPLETE, currentStepId: 'result', rev: 8 });
+    window.localStorage.setItem(SESSION_KEY, sessionId);
+    vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+      if (input.endsWith('/result')) server.sessions.delete(sessionId); // the database was replaced after the page loaded
+      return server.fetch(input, init);
+    });
+
+    await open('/');
+    await waitForHeading('Is your team losing time to the way it works?');
+    expect(document.querySelector('.fn-toast')?.textContent).toBe(EXPIRED_NOTICE);
+    expect(sessionIdOf()).not.toBe(sessionId);
+    expect(server.requests.filter((r) => r.path.endsWith('/result'))).toHaveLength(1);
   });
 });

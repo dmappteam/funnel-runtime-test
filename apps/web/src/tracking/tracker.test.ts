@@ -196,6 +196,23 @@ describe('tracker', () => {
     expect(tracker.pending()).toEqual([]);
   });
 
+  it('sends again after another tab has sent the events whose request failed here', async () => {
+    const api = server([new TypeError('Failed to fetch')]);
+    const tab = start({ fetch: api.fetch });
+    const first = tab.track(intro())!;
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS); // fails, retry in 1 s
+
+    start({ fetch: api.fetch }); // a second tab sends the shared outbox on load
+    await settle();
+    expect(tab.pending()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1000); // the retry finds nothing to send
+
+    const next = tab.track(intro())!;
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+    expect(api.ids()).toEqual([[first.event_id], [first.event_id], [next.event_id]]);
+    expect(tab.pending()).toEqual([]);
+  });
+
   it('drops a batch the server refuses as a whole instead of retrying it forever', async () => {
     const api = server([{ status: 400, body: { error: 'bad_request', message: 'bad batch' } }]);
     const tracker = start({ fetch: api.fetch });
