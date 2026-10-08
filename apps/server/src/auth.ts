@@ -48,6 +48,25 @@ export function checkBasicAuth(header: string | undefined, expected: Credentials
   return userOk && passwordOk;
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Browsers attach cached Basic auth credentials to requests started by other sites, so a foreign page could make
+ * an admin's browser publish or roll back a version. Browsers mark such requests with `Sec-Fetch-Site`, which page
+ * scripts cannot set. Non-browser clients (curl, the generator) do not send it and still need the credentials.
+ */
+export function crossSiteGuard() {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (SAFE_METHODS.has(request.method) || !isProtectedRequest(request)) return;
+    const site = request.headers['sec-fetch-site'];
+    if (site === undefined || site === 'same-origin' || site === 'none') return;
+    reply
+      .status(403)
+      .send({ error: 'forbidden', message: 'Cross-site requests to internal endpoints are not allowed' } satisfies ApiError);
+    return reply;
+  };
+}
+
 /** `onRequest` hook protecting the admin and dashboard pages and their APIs. Everything else stays public. */
 export function basicAuth(expected: Credentials) {
   return async (request: FastifyRequest, reply: FastifyReply) => {

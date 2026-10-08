@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { ApiError } from '@funnel/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { basicAuth } from './auth';
+import { basicAuth, crossSiteGuard } from './auth';
 import { jsonBodyParser } from './body';
 import type { Db } from './db';
 import { handleError } from './errors';
@@ -45,6 +45,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.addContentTypeParser('application/json', { parseAs: 'string' }, jsonBodyParser(app));
   app.setErrorHandler(handleError);
   if (adminAuth) app.addHook('onRequest', basicAuth(adminAuth));
+  app.addHook('onRequest', crossSiteGuard());
 
   await app.register(healthRoutes);
   await app.register(sessionRoutes, { sessions, defaultFunnelId });

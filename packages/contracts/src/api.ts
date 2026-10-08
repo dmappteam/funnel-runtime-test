@@ -123,6 +123,7 @@ export type ApiErrorCode =
   | 'incomplete'
   | 'invalid_answers'
   | 'unauthorized'
+  | 'forbidden'
   | 'config_invalid'
   | 'version_conflict'
   | 'no_previous_version'
