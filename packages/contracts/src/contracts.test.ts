@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { resolveVariant } from '@funnel/engine';
 import { loadConfig } from '@funnel/engine/testing';
 import {
+  AnalyticsQuerySchema,
   ClientEventSchema,
+  CreateSessionRequestSchema,
   answerSubmitted,
   finalizeEvent,
   recommendationExpanded,
@@ -14,6 +16,21 @@ const ctx = (version: 1 | 3) => ({
   sessionId: '0b7f6c1e-8a4d-4c52-9a8e-3f1d2c4b5a69',
   funnel: resolveVariant(loadConfig(version), 'B'),
   utm: { source: 'google', medium: 'cpc', campaign: 'brand' },
+});
+
+describe('request schemas', () => {
+  it('never blocks session creation because of a malformed UTM link', () => {
+    const parsed = CreateSessionRequestSchema.parse({ utm: { source: '', medium: '  cpc ', campaign: 'x'.repeat(500) } });
+    expect(parsed.utm).toEqual({ medium: 'cpc', campaign: 'x'.repeat(200) });
+    expect(CreateSessionRequestSchema.parse({}).utm).toEqual({});
+  });
+
+  it('treats empty analytics query parameters as not set', () => {
+    expect(AnalyticsQuerySchema.parse({ version: '', campaign: '', includeOverrides: 'true' })).toEqual({
+      includeOverrides: true,
+    });
+    expect(AnalyticsQuerySchema.parse({ version: '2' })).toEqual({ version: 2, includeOverrides: false });
+  });
 });
 
 describe('event builders', () => {

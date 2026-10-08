@@ -15,7 +15,11 @@ import {
 export const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const SessionIdSchema = z.string().regex(SESSION_ID_RE, 'session id must be a UUID');
 
-const utmValue = z.string().trim().min(1).max(200).optional();
+/** Lenient on purpose: a malformed marketing link (`?utm_source=` or a huge value) must never block session creation. */
+const utmValue = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim().slice(0, 200) || undefined : v),
+  z.string().optional(),
+);
 export const UtmSchema = z.object({
   source: utmValue,
   medium: utmValue,

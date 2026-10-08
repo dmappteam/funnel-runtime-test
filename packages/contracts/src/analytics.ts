@@ -24,11 +24,13 @@ export interface AnalyticsEventRow {
 /** Campaign filter value that selects sessions without `utm_campaign`. */
 export const NO_CAMPAIGN = '(none)';
 
-/** Query string of GET /api/analytics. */
+const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
+
+/** Query string of GET /api/analytics. Empty parameters (`?version=`) mean "not set". */
 export const AnalyticsQuerySchema = z.object({
-  funnelId: z.string().max(64).optional(),
-  version: z.coerce.number().int().positive().optional(),
-  campaign: z.string().max(200).optional(),
+  funnelId: z.preprocess(emptyToUndefined, z.string().max(64).optional()),
+  version: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
+  campaign: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
   includeOverrides: z
     .enum(['true', 'false', '1', '0'])
     .optional()
