@@ -90,10 +90,11 @@ export function NumberStep({ step, value, strings, fallbackTitle, onSubmit }: Qu
               aria-labelledby={titleId}
               aria-describedby={describedBy || undefined}
               aria-invalid={error !== null || undefined}
-              // Sized to its content so the value and the unit stay centred together.
-              style={{ width: `${Math.max(1, (text || placeholder).length) + 0.5}ch` }}
+              // Exactly as wide as its digits (tabular figures are 1ch each) and right-aligned,
+              // so the value sits next to its unit and the pair stays centred together.
+              style={{ width: `${Math.max(1, (text || placeholder).length)}ch` }}
             />
-            {unit ? <span className="fn-unit">{unit}</span> : null}
+            {unit ? <span className="fn-unit">{strings.unit(unit, current ?? Number(placeholder))}</span> : null}
           </div>
           <button
             type="button"

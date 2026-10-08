@@ -434,7 +434,7 @@
 
 .fn-number-input {
   flex: 0 1 auto;
-  min-width: 1.5ch;
+  min-width: 1ch;
   padding: 0;
   border: 0;
   background: transparent;
@@ -444,7 +444,7 @@
   line-height: 1.1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  text-align: right;
   caret-color: var(--accent);
 }
 .fn-number-input:focus,
