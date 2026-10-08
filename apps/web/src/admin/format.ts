@@ -1,7 +1,8 @@
 import type { ConfigIssue } from '@funnel/engine';
 import { HttpError } from '../api/http';
 
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+// A fixed locale, so dates match the English interface whatever the browser locale is.
+const dateTime = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
 
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
