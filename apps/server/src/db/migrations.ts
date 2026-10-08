@@ -101,7 +101,13 @@ export const MIGRATIONS: Migration[] = [
     version: 2,
     name: 'rejected_events_event_id',
     // Ingestion looks up the event id to log a re-sent invalid event once per reason.
-    sql: 'CREATE INDEX idx_rejected_events_event_id ON rejected_events (event_id);',
+    // Earlier builds logged every re-send, so existing duplicates are removed first (the first row per event and reason stays).
+    sql: `
+      DELETE FROM rejected_events
+      WHERE event_id IS NOT NULL
+        AND id NOT IN (SELECT MIN(id) FROM rejected_events WHERE event_id IS NOT NULL GROUP BY event_id, reason);
+      CREATE INDEX idx_rejected_events_event_id ON rejected_events (event_id);
+    `,
   },
 ];
 

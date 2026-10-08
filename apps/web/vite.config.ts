@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { '/api': 'http://localhost:3000' },
+    // xfwd passes the browser's host, so the server's Origin check accepts same-origin admin writes in dev.
+    proxy: { '/api': { target: 'http://localhost:3000', changeOrigin: true, xfwd: true } },
   },
 });
