@@ -112,7 +112,7 @@ export const MIGRATIONS: Migration[] = [
   {
     version: 3,
     name: 'session_preview_and_demo',
-    // Admin previews get their own assignment, and demo traffic is flagged so it can be removed.
+    // Admin previews get their own assignment, and demo traffic is flagged to tell it from real traffic.
     // SQLite cannot change a CHECK constraint, so the table is rebuilt. No other table references sessions.
     sql: `
       CREATE TABLE sessions_new (

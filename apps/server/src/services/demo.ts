@@ -1,7 +1,6 @@
-import type { AddDemoDataResponse, RemoveDemoDataResponse } from '@funnel/contracts';
+import type { AddDemoDataResponse } from '@funnel/contracts';
 import { DEMO_FUNNEL_ID, runDemoTraffic, type Transport } from '@funnel/generator';
 import type { FastifyInstance } from 'fastify';
-import type { Db } from '../db';
 import { badRequest } from '../errors';
 import type { VersionService } from './versions';
 
@@ -20,10 +19,9 @@ export function injectTransport(app: FastifyInstance): Transport {
   };
 }
 
-/** Demo traffic: sessions created by the traffic generator, flagged `demo` so they can be removed with their events. */
+/** Demo traffic: sessions created by the traffic generator, flagged `demo` to tell them from real ones. */
 export class DemoDataService {
   constructor(
-    private readonly db: Db,
     private readonly versions: VersionService,
     private readonly transport: Transport,
   ) {}
@@ -35,17 +33,5 @@ export class DemoDataService {
     if (active === null) throw badRequest(`Funnel ${funnelId} has no active version`);
     const run = await runDemoTraffic({ transport: this.transport, sessions });
     return { version: run.version ?? active, sessions: run.sessions, completed: run.completed, events: run.events };
-  }
-
-  remove(funnelId: string): RemoveDemoDataResponse {
-    const demoSessions = 'SELECT session_id FROM sessions WHERE funnel_id = ? AND demo = 1';
-    return this.db
-      .transaction((): RemoveDemoDataResponse => {
-        const events = this.db.prepare(`DELETE FROM events WHERE session_id IN (${demoSessions})`).run(funnelId).changes;
-        const rejectedEvents = this.db.prepare(`DELETE FROM rejected_events WHERE session_id IN (${demoSessions})`).run(funnelId).changes;
-        const sessions = this.db.prepare('DELETE FROM sessions WHERE funnel_id = ? AND demo = 1').run(funnelId).changes;
-        return { sessions, events, rejectedEvents };
-      })
-      .immediate();
   }
 }

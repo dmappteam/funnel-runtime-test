@@ -56,6 +56,4 @@ export async function adminRoutes(app: FastifyInstance, { versions, sessions, de
     const body = parseInput(AddDemoDataRequestSchema, request.body ?? {}, 'request body');
     return demo.add(funnelId, body.sessions);
   });
-
-  app.delete(`${base}/demo-data`, async (request) => demo.remove(funnelIdOf(request)));
 }

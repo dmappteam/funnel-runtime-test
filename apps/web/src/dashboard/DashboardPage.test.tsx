@@ -263,36 +263,22 @@ describe('DashboardPage', () => {
     expect(verdict).toContain('at ≈ 48 sessions a day');
   });
 
-  it('adds demo data, then removes it after confirmation, refreshing the report each time', async () => {
-    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
-      this.setAttribute('open', '');
-    };
-    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
-      this.removeAttribute('open');
-    };
-    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+  it('adds demo data and refreshes the report', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
       const body =
         url === '/api/admin/funnels/workstyle-planner/demo-data'
-          ? init.method === 'POST'
-            ? { version: 3, sessions: 200, completed: 141, events: { accepted: 3000, duplicate: 250, rejected: 30 } }
-            : { sessions: 200, events: 3200, rejectedEvents: 30 }
+          ? { version: 3, sessions: 200, completed: 141, events: { accepted: 3000, duplicate: 250, rejected: 30 } }
           : REPORT;
       return { ok: true, status: 200, text: async () => JSON.stringify(body) };
     });
     await renderPage();
-    const button = (label: string) => [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    const add = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Add demo data')!;
 
-    await act(async () => button('Add demo data').click());
+    await act(async () => add.click());
     await settle();
     expect(container.textContent).toContain('Added 200 demo sessions on v3, 141 reached the result.');
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/funnels/workstyle-planner/demo-data')[0]![1]).toMatchObject({ method: 'POST' });
-
-    await act(async () => button('Remove demo data').click());
-    expect(container.querySelector('dialog[open]')!.textContent).toContain('Real sessions, versions and the release log stay.');
-    await act(async () => (container.querySelector('dialog .btn-danger') as HTMLButtonElement).click());
-    await settle();
-    expect(container.textContent).toContain('Removed 200 demo sessions and 3200 of their events.');
-    expect(requestedUrls().filter((url) => url.startsWith('/api/analytics'))).toHaveLength(3);
+    expect(requestedUrls().filter((url) => url.startsWith('/api/analytics'))).toHaveLength(2);
   });
 
   it('switches to Russian with Russian number formatting', async () => {

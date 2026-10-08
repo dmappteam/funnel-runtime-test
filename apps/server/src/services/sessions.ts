@@ -48,7 +48,7 @@ export interface SessionRow {
   last_seen_at: string;
   expires_at: string;
   completed_at: string | null;
-  /** 1 for demo traffic, which the dashboard can remove. */
+  /** 1 for sessions of the traffic generator. */
   demo: number;
 }
 

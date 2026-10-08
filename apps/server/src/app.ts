@@ -42,7 +42,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const events = new EventService(db, sessions, now);
 
   const app = Fastify({ logger: options.logger ?? false });
-  const demo = new DemoDataService(db, versions, injectTransport(app));
+  const demo = new DemoDataService(versions, injectTransport(app));
   // Registered before the routes, so every route plugin inherits them.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, jsonBodyParser(app));
   app.setErrorHandler(handleError);

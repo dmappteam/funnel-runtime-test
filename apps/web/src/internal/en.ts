@@ -154,16 +154,9 @@ export const en = {
   demo: {
     add: 'Add demo data',
     adding: 'Generating…',
-    addHint: 'Runs 200 simulated visitors through the active version via the public API',
-    remove: 'Remove demo data',
-    removing: 'Removing…',
-    confirmTitle: 'Remove demo data?',
-    confirmBody:
-      'Sessions created by the traffic generator are deleted together with their events. Real sessions, versions and the release log stay.',
-    confirmLabel: 'Remove',
+    addHint: 'Runs 200 more simulated visitors through the active version via the public API',
     added: (sessions: number, version: number, completed: number) =>
       `Added ${sessions} demo sessions on v${version}, ${completed} reached the result.`,
-    removed: (sessions: number, events: number) => `Removed ${sessions} demo sessions and ${events} of their events.`,
     failed: (message: string) => `Demo data: ${message}`,
   },
   filters: {

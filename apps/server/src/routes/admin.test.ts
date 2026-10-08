@@ -5,7 +5,6 @@ import type {
   CreatePreviewResponse,
   CreateVersionResponse,
   FunnelAdminResponse,
-  RemoveDemoDataResponse,
   ValidateConfigResponse,
   VersionConfigResponse,
 } from '@funnel/contracts';
@@ -241,42 +240,35 @@ describe('previews of stored versions', () => {
 });
 
 describe('demo data', () => {
-  const demoData = (method: 'POST' | 'DELETE', payload?: object, funnelId = FUNNEL_ID) =>
-    ctx.app.inject({ method, url: `/api/admin/funnels/${funnelId}/demo-data`, ...(payload ? { payload } : {}) });
+  const addDemoData = (payload: object, funnelId = FUNNEL_ID) =>
+    ctx.app.inject({ method: 'POST', url: `/api/admin/funnels/${funnelId}/demo-data`, payload });
 
-  it('adds generator sessions on the active version and removes only them', async () => {
+  it('adds flagged generator sessions on the active version through the public API, and repeated runs add up', async () => {
     ctx = await createTestApp();
     await release(ctx.app, 2);
-    const visitor = await openSession(ctx.app);
+    await openSession(ctx.app);
 
-    const add = await demoData('POST', { sessions: 20 });
+    const add = await addDemoData({ sessions: 20 });
     expect(add.statusCode, add.body).toBe(200);
     const added = add.json<AddDemoDataResponse>();
     expect(added).toMatchObject({ version: 2, sessions: 20 });
     expect(added.completed).toBeGreaterThan(0);
     expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions WHERE demo = 1 AND funnel_version = 2')).toBe(20);
     expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions WHERE demo = 0')).toBe(1);
-
-    const removed = await demoData('DELETE');
-    expect(removed.statusCode, removed.body).toBe(200);
     // Every accepted event plus the server's session_started, and the dead letters of the deliberately broken events.
-    expect(removed.json<RemoveDemoDataResponse>()).toEqual({
-      sessions: 20,
-      events: added.events.accepted + 20,
-      rejectedEvents: added.events.rejected,
-    });
-    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions')).toBe(1);
-    expect(count(ctx.db, 'SELECT COUNT(*) FROM events WHERE session_id <> ?', visitor.sessionId)).toBe(0);
-    expect(count(ctx.db, 'SELECT COUNT(*) FROM events WHERE session_id = ?', visitor.sessionId)).toBe(1);
-    expect(count(ctx.db, 'SELECT COUNT(*) FROM rejected_events')).toBe(0);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM events e JOIN sessions s USING (session_id) WHERE s.demo = 1')).toBe(added.events.accepted + 20);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM rejected_events')).toBe(added.events.rejected);
+
+    expect((await addDemoData({ sessions: 20 })).statusCode).toBe(200);
+    expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions WHERE demo = 1')).toBe(40);
   });
 
   it('needs an active version of the demo funnel', async () => {
     ctx = await createTestApp();
-    expect((await demoData('POST', {})).statusCode).toBe(400);
+    expect((await addDemoData({})).statusCode).toBe(400);
     await release(ctx.app, 1);
-    expect((await demoData('POST', {}, 'other-funnel')).statusCode).toBe(400);
-    expect((await demoData('POST', { sessions: 501 })).statusCode).toBe(400);
+    expect((await addDemoData({}, 'other-funnel')).statusCode).toBe(400);
+    expect((await addDemoData({ sessions: 501 })).statusCode).toBe(400);
     expect(count(ctx.db, 'SELECT COUNT(*) FROM sessions')).toBe(0);
   });
 });

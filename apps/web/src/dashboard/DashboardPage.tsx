@@ -1,8 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { AnalyticsResponse } from '@funnel/contracts';
-import { addDemoData, removeDemoData } from '../api/admin';
+import { addDemoData } from '../api/admin';
 import { HttpError } from '../api/http';
-import { useConfirm } from '../admin/ConfirmDialog';
 import { InternalNav, LangProvider, useI18n } from '../internal/i18n';
 import { AbSection } from './AbSection';
 import { dashboardSearch, fetchAnalytics, readQuery, type DashboardQuery } from './api';
@@ -91,64 +90,36 @@ function EmptyState({ loading, onRefresh }: { loading: boolean; onRefresh: () =>
   );
 }
 
-type DemoBusy = 'add' | 'remove' | null;
-
-/** Generator traffic on the active version, and its removal. Both need the admin credentials. */
+/** Generator traffic on the active version. Every run adds new sessions. Needs the admin credentials. */
 function DemoControls({ funnelId, onChanged }: { funnelId: string; onChanged: () => void }) {
   const { t } = useI18n();
-  const { confirm, dialog } = useConfirm();
-  const [busy, setBusy] = useState<DemoBusy>(null);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
 
-  const run = async (kind: Exclude<DemoBusy, null>, action: () => Promise<string>) => {
-    setBusy(kind);
+  const add = async () => {
+    setBusy(true);
     setMessage(null);
     try {
-      setMessage({ tone: 'success', text: await action() });
+      const res = await addDemoData(funnelId);
+      setMessage({ tone: 'success', text: t.demo.added(res.sessions, res.version, res.completed) });
     } catch (err) {
       setMessage({ tone: 'danger', text: t.demo.failed(messageOf(err)) });
     } finally {
-      setBusy(null);
+      setBusy(false);
       onChanged();
     }
   };
 
-  const add = () =>
-    run('add', async () => {
-      const res = await addDemoData(funnelId);
-      return t.demo.added(res.sessions, res.version, res.completed);
-    });
-
-  const remove = async () => {
-    const confirmed = await confirm({
-      title: t.demo.confirmTitle,
-      body: <p>{t.demo.confirmBody}</p>,
-      confirmLabel: t.demo.confirmLabel,
-      tone: 'danger',
-    });
-    if (!confirmed) return;
-    await run('remove', async () => {
-      const res = await removeDemoData(funnelId);
-      return t.demo.removed(res.sessions, res.events);
-    });
-  };
-
   return (
     <div className="dash-demo">
-      <div className="dash-demo-actions">
-        <button type="button" className="btn btn-secondary btn-sm" title={t.demo.addHint} disabled={busy !== null} onClick={() => void add()}>
-          {busy === 'add' ? t.demo.adding : t.demo.add}
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => void remove()}>
-          {busy === 'remove' ? t.demo.removing : t.demo.remove}
-        </button>
-      </div>
+      <button type="button" className="btn btn-secondary btn-sm" title={t.demo.addHint} disabled={busy} onClick={() => void add()}>
+        {busy ? t.demo.adding : t.demo.add}
+      </button>
       {message && (
         <p className={message.tone === 'danger' ? 'dash-demo-message dash-demo-error' : 'dash-demo-message'} role="status">
           {message.text}
         </p>
       )}
-      {dialog}
     </div>
   );
 }

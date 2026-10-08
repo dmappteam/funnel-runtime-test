@@ -46,7 +46,7 @@ export const CreateSessionRequestSchema = z.object({
   utm: UtmSchema.default({}),
   /** QA override of the variant (`?variant=` query parameter). Used only when the session is created. */
   variant: z.string().max(16).optional(),
-  /** Traffic of the demo data generator. It counts like any other session and can be removed from the dashboard. */
+  /** Traffic of the demo data generator. It counts like any other session; the flag tells synthetic sessions from real ones. */
   demo: z.boolean().optional(),
 });
 export type CreateSessionRequest = z.input<typeof CreateSessionRequestSchema>;
@@ -254,9 +254,3 @@ export interface AddDemoDataResponse {
   events: { accepted: number; duplicate: number; rejected: number };
 }
 
-/** DELETE /api/admin/funnels/:funnelId/demo-data — removes demo sessions with their events and rejected events. */
-export interface RemoveDemoDataResponse {
-  sessions: number;
-  events: number;
-  rejectedEvents: number;
-}

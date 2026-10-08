@@ -4,7 +4,6 @@ import type {
   CreateVersionResponse,
   FunnelAdminResponse,
   PublishResponse,
-  RemoveDemoDataResponse,
   RollbackResponse,
   ValidateConfigResponse,
   VersionConfigResponse,
@@ -57,6 +56,3 @@ export function addDemoData(funnelId: string): Promise<AddDemoDataResponse> {
   return http<AddDemoDataResponse>('POST', `${funnelUrl(funnelId)}/demo-data`, {});
 }
 
-export function removeDemoData(funnelId: string): Promise<RemoveDemoDataResponse> {
-  return http<RemoveDemoDataResponse>('DELETE', `${funnelUrl(funnelId)}/demo-data`);
-}
