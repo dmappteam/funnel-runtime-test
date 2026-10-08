@@ -407,7 +407,7 @@
 
 .fn-number-field {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
   gap: 8px;
   min-width: 0;
