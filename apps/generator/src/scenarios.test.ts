@@ -152,6 +152,15 @@ describe('iteration2', () => {
     expect(records.slice(-3).every((r) => r.version === 2)).toBe(true);
   });
 
+  it('rolls back exactly once when the answer to the rollback is lost', async () => {
+    let rollbacks = 0;
+    const fault = (req: HttpRequest): Fault => (req.path.endsWith('/rollback') && rollbacks++ === 0 ? 'lost' : null);
+    const run = await runFake({ scenario: 'iteration2', sessions: 40 }, { configs: [rawConfig(1), rawConfig(2)], fault });
+    expect(failedAssertions(run)).toEqual([]);
+    expect(rollbacks).toBe(1);
+    expect(run.server.activeVersion).toBe(2);
+  });
+
   it('needs v2 active', async () => {
     await expect(runFake({ scenario: 'iteration2' })).rejects.toThrow(/needs v2 active, the active version is v1/);
   });

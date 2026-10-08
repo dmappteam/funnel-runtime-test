@@ -25,6 +25,8 @@ import {
   type AnalyticsEventRow,
   type EventResult,
   type RejectReason,
+  type ReleaseAction,
+  type ReleaseEntry,
   type SessionInfo,
   type SessionResponse,
   type SessionState,
@@ -77,11 +79,13 @@ export class FakeServer implements Transport {
   /** Every request in arrival order. */
   readonly requests: HttpRequest[] = [];
   private readonly releases: number[] = [];
+  private readonly releaseLog: ReleaseEntry[] = [];
 
   constructor(private readonly options: FakeServerOptions) {
     for (const raw of options.configs) {
       const config = FunnelConfigSchema.parse(JSON.parse(raw));
       this.configs.set(config.version, { raw, config });
+      this.logRelease('publish', config.version, this.activeVersion);
       this.releases.push(config.version);
     }
   }
@@ -296,7 +300,7 @@ export class FakeServer implements Transport {
         isActive: version === this.activeVersion,
         sessions: sessions.filter((s) => s.info.funnelVersion === version).length,
       })),
-      releases: [],
+      releases: this.releaseLog.toReversed(),
     };
   }
 
@@ -324,14 +328,22 @@ export class FakeServer implements Transport {
     const parsed = PublishRequestSchema.safeParse(body);
     if (!parsed.success || !this.configs.has(parsed.data.version)) return fail(404, 'not_found', 'unknown version');
     const previousVersion = this.activeVersion;
-    if (previousVersion !== parsed.data.version) this.releases.push(parsed.data.version);
+    if (previousVersion !== parsed.data.version) {
+      this.logRelease('publish', parsed.data.version, previousVersion);
+      this.releases.push(parsed.data.version);
+    }
     return ok(200, { activeVersion: parsed.data.version, previousVersion });
   }
 
   private rollback(): HttpResponse {
     if (this.releases.length < 2) return fail(409, 'no_previous_version', 'nothing to roll back to');
     const rolledBackFrom = this.releases.pop()!;
+    this.logRelease('rollback', this.activeVersion!, rolledBackFrom);
     return ok(200, { activeVersion: this.activeVersion, rolledBackFrom });
+  }
+
+  private logRelease(action: ReleaseAction, version: number, fromVersion: number | null): void {
+    this.releaseLog.push({ id: this.releaseLog.length + 1, version, action, fromVersion, createdAt: TIME });
   }
 
   /** Distinct sessions per version × variant; `reached` counts sessions with any event on the step. */

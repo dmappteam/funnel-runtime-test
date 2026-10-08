@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HttpError, UnreachableError } from './api';
+import { HttpError, UnconfirmedError, UnreachableError } from './api';
 import { USAGE, parseCliArgs } from './args';
 import { ScenarioError, runScenario } from './scenarios';
 import { FetchTransport } from './transport';
@@ -30,7 +30,7 @@ async function main(): Promise<number> {
     }
     return report.ok ? 0 : 1;
   } catch (err) {
-    if (err instanceof UnreachableError || err instanceof ScenarioError || err instanceof HttpError) {
+    if (err instanceof UnreachableError || err instanceof UnconfirmedError || err instanceof ScenarioError || err instanceof HttpError) {
       console.error(`\nERROR: ${err.message}`);
     } else {
       console.error('\nERROR:', err);
