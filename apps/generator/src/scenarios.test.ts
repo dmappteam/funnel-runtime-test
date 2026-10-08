@@ -4,7 +4,7 @@ import { UnreachableError } from './api';
 import { FakeServer, type Fault } from './fakeServer';
 import { ScenarioError, runScenario } from './scenarios';
 import { ADMIN, CONFIGS_DIR, rawConfig, runFake } from './testing';
-import { NetworkError, type HttpRequest } from './transport';
+import { NetworkError, type HttpRequest, type Transport } from './transport';
 
 const failedAssertions = (run: Awaited<ReturnType<typeof runFake>>) => run.report.assertions.filter((a) => !a.ok);
 
@@ -113,6 +113,18 @@ describe('demo', () => {
       expect(r).toMatchObject({ version: 1, status: 'completed', resumedOn: { version: 1, configVersion: 1, stepId: r.pausedAt } });
     }
     expect(records.slice(40).every((r) => r.version === 2)).toBe(true);
+  });
+
+  it('reads the active version back after publishing instead of trusting the answer', async () => {
+    const server = new FakeServer({ configs: [rawConfig(1)], admin: ADMIN });
+    // A publish that answers 200 but activates nothing.
+    const transport: Transport = {
+      send: (req) =>
+        req.path.endsWith('/publish') ? Promise.resolve({ status: 200, body: { activeVersion: 2, previousVersion: 1 } }) : server.send(req),
+    };
+    const run = await runFake({ scenario: 'demo', transport }, server);
+    expect(run.report.assertions.find((a) => a.name === 'v2 is active after publishing')).toMatchObject({ ok: false, detail: 'active v1' });
+    expect(run.report.ok).toBe(false);
   });
 
   it('needs v1 active', async () => {

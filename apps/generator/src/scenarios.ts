@@ -320,7 +320,9 @@ class Run {
     this.log.step(`Publish v${version}`);
     const res = await this.api.publish(FUNNEL_ID, version);
     this.log.info(`active v${res.activeVersion}, previous ${res.previousVersion === null ? 'none' : `v${res.previousVersion}`}`);
-    this.assert(`v${version} is active after publishing`, res.activeVersion === version, `active v${res.activeVersion}`);
+    // The answer echoes the requested version, so the check reads the active version back.
+    const { activeVersion } = await this.api.getFunnel(FUNNEL_ID);
+    this.assert(`v${version} is active after publishing`, activeVersion === version, `active ${activeVersion === null ? 'none' : `v${activeVersion}`}`);
   }
 
   private async rollback(expected: number): Promise<void> {
