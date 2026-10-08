@@ -1,9 +1,10 @@
+import type { ClientEvent } from '@funnel/contracts';
 import { describe, expect, it } from 'vitest';
 import { UnreachableError } from './api';
 import { FakeServer, type Fault } from './fakeServer';
 import { ScenarioError, runScenario } from './scenarios';
 import { ADMIN, CONFIGS_DIR, rawConfig, runFake } from './testing';
-import { NetworkError, type HttpRequest } from './transport';
+import { NetworkError, type HttpRequest, type Transport } from './transport';
 
 const failedAssertions = (run: Awaited<ReturnType<typeof runFake>>) => run.report.assertions.filter((a) => !a.ok);
 
@@ -114,6 +115,18 @@ describe('demo', () => {
     expect(records.slice(40).every((r) => r.version === 2)).toBe(true);
   });
 
+  it('reads the active version back after publishing instead of trusting the answer', async () => {
+    const server = new FakeServer({ configs: [rawConfig(1)], admin: ADMIN });
+    // A publish that answers 200 but activates nothing.
+    const transport: Transport = {
+      send: (req) =>
+        req.path.endsWith('/publish') ? Promise.resolve({ status: 200, body: { activeVersion: 2, previousVersion: 1 } }) : server.send(req),
+    };
+    const run = await runFake({ scenario: 'demo', transport }, server);
+    expect(run.report.assertions.find((a) => a.name === 'v2 is active after publishing')).toMatchObject({ ok: false, detail: 'active v1' });
+    expect(run.report.ok).toBe(false);
+  });
+
   it('needs v1 active', async () => {
     await expect(runFake({ scenario: 'demo' }, { configs: [rawConfig(1), rawConfig(2)] })).rejects.toThrow(/needs v1 active, the active version is v2/);
   });
@@ -152,7 +165,42 @@ describe('iteration2', () => {
     expect(records.slice(-3).every((r) => r.version === 2)).toBe(true);
   });
 
+  it('rolls back exactly once when the answer to the rollback is lost', async () => {
+    let rollbacks = 0;
+    const fault = (req: HttpRequest): Fault => (req.path.endsWith('/rollback') && rollbacks++ === 0 ? 'lost' : null);
+    const run = await runFake({ scenario: 'iteration2', sessions: 40 }, { configs: [rawConfig(1), rawConfig(2)], fault });
+    expect(failedAssertions(run)).toEqual([]);
+    expect(rollbacks).toBe(1);
+    expect(run.server.activeVersion).toBe(2);
+  });
+
+  it('counts a recommendation_expanded as stored when the retry after a lost answer gets duplicate', async () => {
+    let rolledBack = false;
+    const lost: string[] = [];
+    const fault = (req: HttpRequest): Fault => {
+      if (req.path.endsWith('/rollback')) rolledBack = true;
+      if (!rolledBack || lost.length > 0 || req.path !== '/api/events' || !req.body?.includes('"recommendation_expanded"')) return null;
+      lost.push(req.body);
+      return 'lost';
+    };
+    const run = await runFake({ scenario: 'iteration2', sessions: 40 }, { configs: [rawConfig(1), rawConfig(2)], fault });
+    const events = (JSON.parse(lost[0]!) as { events: ClientEvent[] }).events;
+    const expanded = events.find((e) => e.name === 'recommendation_expanded')!;
+    expect(run.simulation.ingestion.statusesOf(expanded.event_id)[0]).toBe('duplicate');
+    expect(failedAssertions(run)).toEqual([]);
+    expect(run.report.ok).toBe(true);
+  });
+
   it('needs v2 active', async () => {
     await expect(runFake({ scenario: 'iteration2' })).rejects.toThrow(/needs v2 active, the active version is v1/);
+  });
+});
+
+describe('small runs', () => {
+  it.each(['demo', 'iteration2'] as const)('%s pauses at least one session per phase with --sessions 2', async (scenario) => {
+    const configs = scenario === 'demo' ? [rawConfig(1)] : [rawConfig(1), rawConfig(2)];
+    const run = await runFake({ scenario, sessions: 2 }, { configs });
+    expect(failedAssertions(run)).toEqual([]);
+    expect(run.report.ok).toBe(true);
   });
 });

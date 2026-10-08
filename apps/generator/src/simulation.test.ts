@@ -3,6 +3,7 @@ import { computePath, resolveVariant } from '@funnel/engine';
 import { loadConfig } from '@funnel/engine/testing';
 import { ClientEventSchema, type ClientEvent } from '@funnel/contracts';
 import type { Fault } from './fakeServer';
+import { NO_CHAOS } from './outbox';
 import { rawConfig, runFake, type FakeRun } from './testing';
 import type { HttpRequest } from './transport';
 import type { SessionRecord } from './virtualUser';
@@ -80,6 +81,16 @@ describe('events', () => {
     expect(run.server.events.size).toBe(run.report.events.uniqueValid + run.report.groundTruth.sessions);
   });
 
+  it('a re-sent invalid event is answered rejected each time but logged once, like the server does', async () => {
+    const run = await runFake({ sessions: 10, chaos: { ...NO_CHAOS, resend: 1, invalid: 0.2 } });
+    const { invalidEvents, invalidSends } = run.report.events;
+    expect(invalidEvents).toBeGreaterThan(0);
+    expect(invalidSends).toBe(2 * invalidEvents);
+    expect(run.report.responses.rejected).toBe(invalidSends);
+    expect(run.report.verification.rejectedLogDelta).toBe(invalidEvents);
+    expect(run.report.ok).toBe(true);
+  });
+
   it('retries lost and failed requests with the same payload and still stores every event once', async () => {
     let n = 0;
     const faulted: string[] = [];
@@ -141,6 +152,23 @@ describe('virtual user', () => {
       });
       expect(events.some((e) => e.name === 'session_started')).toBe(false);
     }
+  });
+
+  it('sends recommendation_expanded only when the CTA expands a non-empty recommendation list, like the web runtime', async () => {
+    const config = loadConfig(3);
+    config.results.async_native.cta.action = 'book_call';
+    config.results.balanced.recommendations = [];
+    for (const variant of Object.values(config.experiment.variants)) delete variant.resultOverrides.async_native;
+    const run = await runFake({ sessions: 150 }, { configs: [JSON.stringify(config)] });
+
+    const clicked = run.simulation.records.filter((r) => r.ctaClicked);
+    for (const record of clicked) {
+      const expands = record.resultId !== 'async_native' && record.resultId !== 'balanced';
+      expect(record.events.filter((e) => e.name === 'recommendation_expanded'), record.resultId!).toHaveLength(expands ? 1 : 0);
+    }
+    const results = new Set(clicked.map((r) => r.resultId));
+    for (const id of ['async_native', 'balanced', 'office_core']) expect(results).toContain(id);
+    expect(run.report.ok).toBe(true);
   });
 
   it('covers the branches and results of v3, compliance included', async () => {

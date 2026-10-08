@@ -110,6 +110,31 @@ describe('cross-site guard', () => {
     });
     expect(read.statusCode).toBe(200);
   });
+
+  it('checks Origin against the request host when the browser sends no Sec-Fetch-Site', async () => {
+    ctx = await createTestApp({ adminAuth: ADMIN });
+    await release(ctx.app, 1, admin);
+    const post = (headers: Record<string, string>, payload?: string) =>
+      ctx.app.inject({ method: 'POST', url: `/api/admin/funnels/${FUNNEL_ID}/rollback`, headers: { ...admin, ...headers }, payload });
+
+    // An HTML form on another site: Fastify parses the text/plain body, only Origin tells it apart.
+    for (const origin of ['https://evil.example', 'https://funnel.example.evil.example', 'http://funnel.example:8080', 'null']) {
+      const res = await post({ host: 'funnel.example', origin, 'content-type': 'text/plain' }, 'x=1');
+      expect(res.statusCode, origin).toBe(403);
+      expect(res.json<ApiError>().error).toBe('forbidden');
+    }
+
+    // Same origin, also behind a reverse proxy, and clients without either header pass; the rollback then fails only
+    // because there is one version.
+    const passing: Record<string, string>[] = [
+      { host: 'funnel.example', origin: 'https://funnel.example' },
+      { host: 'localhost:3000', origin: 'http://localhost:3000' },
+      { host: 'Funnel.Example:443', origin: 'https://funnel.example' },
+      { host: '127.0.0.1:3000', 'x-forwarded-host': 'funnel.example', origin: 'https://funnel.example' },
+      {},
+    ];
+    for (const headers of passing) expect((await post(headers)).statusCode, JSON.stringify(headers)).toBe(409);
+  });
 });
 
 describe('checkBasicAuth', () => {

@@ -97,6 +97,12 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: 'rejected_events_event_id',
+    // Ingestion looks up the event id to log a re-sent invalid event once per reason.
+    sql: 'CREATE INDEX idx_rejected_events_event_id ON rejected_events (event_id);',
+  },
 ];
 
 /** Applies pending migrations in order. Returns the versions applied by this call. */

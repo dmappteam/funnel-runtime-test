@@ -187,11 +187,15 @@ class Run {
     const pausedV3 = paused(v3);
     await this.resume('Paused v3 sessions come back after the rollback', pausedV3, 3, true);
     const expanded = pausedV3.flatMap((u) => u.record.events.filter((e) => e.name === 'recommendation_expanded'));
-    const accepted = expanded.filter((e) => this.sim.ingestion.statusesOf(e.event_id)[0] === 'accepted');
+    // After a lost answer the retry gets `duplicate`: the first attempt stored the event.
+    const stored = expanded.filter((e) => {
+      const first = this.sim.ingestion.statusesOf(e.event_id)[0];
+      return first === 'accepted' || first === 'duplicate';
+    });
     this.assert(
       'recommendation_expanded of v3 sessions accepted after the rollback',
-      expanded.length > 0 && accepted.length === expanded.length,
-      `${accepted.length}/${expanded.length} accepted`,
+      expanded.length > 0 && stored.length === expanded.length,
+      `${stored.length}/${expanded.length} stored`,
     );
 
     const few = Math.max(3, Math.round(n / 20));
@@ -257,7 +261,10 @@ class Run {
     this.log.step(title);
     const users = Array.from({ length: count }, () => this.sim.newUser());
     const first = users[0]?.record.index ?? 0;
-    const pausing = new Set(new Rng(hashSeed(this.o.seed, 'pausing', first)).shuffle(users).slice(0, Math.round(count * (opts.pauseShare ?? 0))));
+    const share = opts.pauseShare ?? 0;
+    // At least one, or a small run fails its own "paused sessions exist" check.
+    const pauses = share > 0 ? Math.max(1, Math.round(count * share)) : 0;
+    const pausing = new Set(new Rng(hashSeed(this.o.seed, 'pausing', first)).shuffle(users).slice(0, pauses));
     const choose = opts.pauseAt ?? ((funnel, user, rng) => midFunnelStep(funnel, user.plan.persona, rng));
     await runPool(
       users,
@@ -313,7 +320,9 @@ class Run {
     this.log.step(`Publish v${version}`);
     const res = await this.api.publish(FUNNEL_ID, version);
     this.log.info(`active v${res.activeVersion}, previous ${res.previousVersion === null ? 'none' : `v${res.previousVersion}`}`);
-    this.assert(`v${version} is active after publishing`, res.activeVersion === version, `active v${res.activeVersion}`);
+    // The answer echoes the requested version, so the check reads the active version back.
+    const { activeVersion } = await this.api.getFunnel(FUNNEL_ID);
+    this.assert(`v${version} is active after publishing`, activeVersion === version, `active ${activeVersion === null ? 'none' : `v${activeVersion}`}`);
   }
 
   private async rollback(expected: number): Promise<void> {

@@ -50,16 +50,42 @@ export function checkBasicAuth(header: string | undefined, expected: Credentials
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+/** The host the browser addressed. A reverse proxy passes it in `X-Forwarded-Host`, the first entry when proxies are chained. */
+function requestHost(request: FastifyRequest): string | undefined {
+  const forwarded = request.headers['x-forwarded-host'];
+  const host = (Array.isArray(forwarded) ? forwarded[0] : forwarded) ?? request.headers.host;
+  return host?.split(',', 1)[0]?.trim();
+}
+
+function originMatchesHost(origin: string, host: string | undefined): boolean {
+  if (!host) return false;
+  try {
+    const url = new URL(origin);
+    // Parsed with the Origin's scheme, so letter case and a default port in the host do not matter.
+    return url.host === new URL(`${url.protocol}//${host}`).host;
+  } catch {
+    // `Origin: null` (sandboxed frames, cross-origin redirects) or a malformed header.
+    return false;
+  }
+}
+
+/** `Sec-Fetch-Site` when the browser sends it, else `Origin`. A request with neither does not come from a browser. */
+function isCrossOrigin(request: FastifyRequest): boolean {
+  const site = request.headers['sec-fetch-site'];
+  if (site !== undefined) return site !== 'same-origin' && site !== 'none';
+  const origin = request.headers.origin;
+  return origin !== undefined && !originMatchesHost(origin, requestHost(request));
+}
+
 /**
  * Browsers attach cached Basic auth credentials to requests started by other sites, so a foreign page could make
  * an admin's browser publish or roll back a version. Browsers mark such requests with `Sec-Fetch-Site`, which page
- * scripts cannot set. Non-browser clients (curl, the generator) do not send it and still need the credentials.
+ * scripts cannot set. Browsers without Fetch Metadata (older Safari, plain HTTP origins) still send `Origin` with
+ * a POST, even from an HTML form. Non-browser clients (curl, the generator) send neither and still need the credentials.
  */
 export function crossSiteGuard() {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (SAFE_METHODS.has(request.method) || !isProtectedRequest(request)) return;
-    const site = request.headers['sec-fetch-site'];
-    if (site === undefined || site === 'same-origin' || site === 'none') return;
+    if (SAFE_METHODS.has(request.method) || !isProtectedRequest(request) || !isCrossOrigin(request)) return;
     reply
       .status(403)
       .send({ error: 'forbidden', message: 'Cross-site requests to internal endpoints are not allowed' } satisfies ApiError);
