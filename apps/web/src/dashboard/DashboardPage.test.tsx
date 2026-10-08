@@ -205,6 +205,18 @@ describe('DashboardPage', () => {
     expect(requestedUrls()[1]).toBe('/api/analytics?funnelId=workstyle-planner&campaign=%28none%29');
   });
 
+  it('labels the data quality totals as all versions, since the version filter does not apply to them', async () => {
+    respond(200, { ...REPORT, filters: { ...REPORT.filters, version: 2 } });
+    await renderPage('?version=2');
+    const quality = container.querySelector('section[aria-labelledby="dash-quality"]')!;
+    expect([...quality.querySelectorAll('.dash-tile-detail')].map((el) => el.textContent)).toEqual([
+      'unique event ids, all versions, current campaign',
+      'all versions, current campaign',
+      'all versions, current campaign, excluded from the numbers',
+      'refused at ingestion',
+    ]);
+  });
+
   it('asks to sign in on 401', async () => {
     respond(401, { error: 'unauthorized', message: 'Authentication required' });
     await renderPage();
