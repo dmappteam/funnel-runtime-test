@@ -40,9 +40,19 @@ function parseTs(ts: string | null): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
+interface Instant {
+  ms: number;
+  ts: string;
+}
+
+/** Ties between equal instants written differently fall back to the text, so the choice stays deterministic. */
+function compareInstants(a: Instant, b: Instant): number {
+  return compare(a.ms, b.ms) || compare(a.ts, b.ts);
+}
+
 /** Timestamps are parsed because client times may carry an offset, which breaks string comparison. */
 export function compareTimestamps(a: string, b: string): number {
-  return compare(parseTs(a) ?? -Infinity, parseTs(b) ?? -Infinity) || compare(a, b);
+  return compareInstants({ ms: parseTs(a) ?? -Infinity, ts: a }, { ms: parseTs(b) ?? -Infinity, ts: b });
 }
 
 /** Client time (server time when missing or unparseable), then server time, then event_id. */
@@ -60,8 +70,8 @@ function isBetterAnchor(candidate: AnalyticsEventRow, current: AnalyticsEventRow
 
 function summarize(events: AnalyticsEventRow[]): SessionSummary {
   let anchor = events[0]!;
-  let firstSeen = anchor.server_ts;
-  let lastSeen = anchor.server_ts;
+  let first: Instant = { ms: Infinity, ts: '' };
+  let last: Instant = { ms: -Infinity, ts: '' };
   let latestResult: { event: AnalyticsEventRow; resultId: string } | null = null;
   let resultViewed = false;
   let ctaClicked = false;
@@ -71,8 +81,9 @@ function summarize(events: AnalyticsEventRow[]): SessionSummary {
 
   for (const e of events) {
     if (isBetterAnchor(e, anchor)) anchor = e;
-    if (compareTimestamps(e.server_ts, firstSeen) < 0) firstSeen = e.server_ts;
-    if (compareTimestamps(e.server_ts, lastSeen) > 0) lastSeen = e.server_ts;
+    const seen = { ms: parseTs(e.server_ts) ?? -Infinity, ts: e.server_ts };
+    if (compareInstants(seen, first) < 0) first = seen;
+    if (compareInstants(seen, last) > 0) last = seen;
     eventCounts.set(e.name, (eventCounts.get(e.name) ?? 0) + 1);
     if (e.step_id) steps.add(e.step_id);
 
@@ -111,8 +122,8 @@ function summarize(events: AnalyticsEventRow[]): SessionSummary {
     ctaClicked,
     backClicked,
     finalResultId: latestResult?.resultId ?? null,
-    firstSeen,
-    lastSeen,
+    firstSeen: first.ts,
+    lastSeen: last.ts,
   };
 }
 
