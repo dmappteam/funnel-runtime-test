@@ -261,7 +261,10 @@ class Run {
     this.log.step(title);
     const users = Array.from({ length: count }, () => this.sim.newUser());
     const first = users[0]?.record.index ?? 0;
-    const pausing = new Set(new Rng(hashSeed(this.o.seed, 'pausing', first)).shuffle(users).slice(0, Math.round(count * (opts.pauseShare ?? 0))));
+    const share = opts.pauseShare ?? 0;
+    // At least one, or a small run fails its own "paused sessions exist" check.
+    const pauses = share > 0 ? Math.max(1, Math.round(count * share)) : 0;
+    const pausing = new Set(new Rng(hashSeed(this.o.seed, 'pausing', first)).shuffle(users).slice(0, pauses));
     const choose = opts.pauseAt ?? ((funnel, user, rng) => midFunnelStep(funnel, user.plan.persona, rng));
     await runPool(
       users,

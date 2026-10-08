@@ -183,3 +183,12 @@ describe('iteration2', () => {
     await expect(runFake({ scenario: 'iteration2' })).rejects.toThrow(/needs v2 active, the active version is v1/);
   });
 });
+
+describe('small runs', () => {
+  it.each(['demo', 'iteration2'] as const)('%s pauses at least one session per phase with --sessions 2', async (scenario) => {
+    const configs = scenario === 'demo' ? [rawConfig(1)] : [rawConfig(1), rawConfig(2)];
+    const run = await runFake({ scenario, sessions: 2 }, { configs });
+    expect(failedAssertions(run)).toEqual([]);
+    expect(run.report.ok).toBe(true);
+  });
+});
