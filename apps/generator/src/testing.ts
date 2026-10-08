@@ -19,12 +19,12 @@ export interface FakeRun extends RunResult {
   output: string[];
 }
 
-/** Runs a scenario against a fresh fake server with reproducible ids, no backoff delays and captured output. */
-export async function runFake(
-  run: Partial<RunOptions>,
-  server: Partial<FakeServerOptions> = {},
-): Promise<FakeRun> {
-  const fake = new FakeServer({ configs: [rawConfig(1)], admin: ADMIN, ...server });
+/**
+ * Runs a scenario against a fake server (a fresh one unless an instance is passed),
+ * with reproducible ids, no backoff delays and captured output.
+ */
+export async function runFake(run: Partial<RunOptions> = {}, server: FakeServer | Partial<FakeServerOptions> = {}): Promise<FakeRun> {
+  const fake = server instanceof FakeServer ? server : new FakeServer({ configs: [rawConfig(1)], admin: ADMIN, ...server });
   const output: string[] = [];
   const seed = run.seed ?? 42;
   const result = await runScenario({
