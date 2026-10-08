@@ -267,12 +267,14 @@ describe('session API', () => {
     expect(otherFunnel.statusCode).toBe(400);
   });
 
-  it('creates the session on the funnel given in the query', async () => {
+  it('creates the session on the funnel given in the query and needs no funnel to return it', async () => {
     ctx = await createTestApp({ defaultFunnelId: undefined });
     await release(ctx.app, 1);
     expect((await openSession(ctx.app)).status).toBe(400);
-    const res = await ctx.app.inject({ method: 'PUT', url: `/api/sessions/${randomUUID()}?funnelId=workstyle-planner` });
+    const sessionId = randomUUID();
+    const res = await ctx.app.inject({ method: 'PUT', url: `/api/sessions/${sessionId}?funnelId=workstyle-planner` });
     expect(res.statusCode).toBe(201);
     expect(res.json<SessionResponse>().session.funnelId).toBe('workstyle-planner');
+    expect((await openSession(ctx.app, {}, sessionId)).status).toBe(200);
   });
 });

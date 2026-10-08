@@ -170,13 +170,14 @@ export class SessionService {
     this.stmt = prepareStatements(db);
   }
 
-  /** Creates the session on the active version, or returns the existing one unchanged (the body is then ignored). */
-  open(sessionId: string, funnelId: string, request: CreateSessionInput): SessionResponse {
+  /** Creates the session on the active version, or returns the existing one unchanged (funnel and body are then ignored). */
+  open(sessionId: string, funnelId: string | undefined, request: CreateSessionInput): SessionResponse {
     return this.db
       .transaction((): SessionResponse => {
         const now = this.now();
         const existing = this.stmt.find.get(sessionId);
         if (existing) return this.respond(this.extend(this.ensureLive(existing, now), now), false);
+        if (!funnelId) throw badRequest('funnelId is required');
 
         const version = this.versions.getActiveVersion(funnelId);
         const config = version === null ? null : this.versions.getConfig(funnelId, version);

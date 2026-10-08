@@ -1,7 +1,7 @@
 import { CreateSessionRequestSchema, ResultRequestSchema, SaveStateRequestSchema } from '@funnel/contracts';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { badRequest, parseInput } from '../errors';
+import { parseInput } from '../errors';
 import type { SessionService } from '../services/sessions';
 import { FunnelIdSchema, SessionParamsSchema } from './params';
 
@@ -16,7 +16,6 @@ export async function sessionRoutes(app: FastifyInstance, { sessions, defaultFun
   app.put('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = parseInput(SessionParamsSchema, request.params, 'session id');
     const funnelId = parseInput(OpenQuerySchema, request.query, 'query').funnelId ?? defaultFunnelId;
-    if (!funnelId) throw badRequest('funnelId is required');
     const body = parseInput(CreateSessionRequestSchema, request.body ?? {}, 'request body');
     const response = sessions.open(sessionId, funnelId, body);
     return reply.status(response.created ? 201 : 200).send(response);
