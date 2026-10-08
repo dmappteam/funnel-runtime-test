@@ -248,6 +248,8 @@ export const ru: Messages = {
     conditionalHint: 'Показывается только сессиям, чьи ответы подходят под условие visibleWhen',
     reachedOf: (reached, started) => `${reached} из ${started} начатых сессий`,
     worst: 'Наибольший отвал',
+    order: 'Порядок',
+    orders: { steps: 'По шагам', dropoff: 'По отвалу', reached: 'По охвату' },
   },
   results: {
     withResult: (n) => `сессий с результатом: ${n}`,

@@ -53,7 +53,7 @@ export function useI18n(): LangState {
 export function LangSwitch() {
   const { lang, setLang, t } = useI18n();
   return (
-    <div className="lang-switch" role="group" aria-label={t.nav.language}>
+    <div className="segmented lang-switch" role="group" aria-label={t.nav.language}>
       {(['en', 'ru'] as const).map((option) => (
         <button key={option} type="button" aria-pressed={lang === option} onClick={() => setLang(option)}>
           {option.toUpperCase()}

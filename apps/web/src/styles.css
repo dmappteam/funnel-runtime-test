@@ -247,16 +247,15 @@ textarea {
   font-weight: 700;
 }
 
-/* EN | RU switch of the internal pages. */
-.lang-switch {
+/* Segmented control: one pressed option out of a few (language, step order). */
+.segmented {
   display: inline-flex;
-  margin-left: auto;
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
 }
-.lang-switch button {
+.segmented button {
   padding: 4px 10px;
   border: 0;
   border-radius: 8px;
@@ -267,9 +266,12 @@ textarea {
   font-weight: 700;
   cursor: pointer;
 }
-.lang-switch button[aria-pressed='true'] {
+.segmented button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
+}
+.lang-switch {
+  margin-left: auto;
 }
 
 table.data {

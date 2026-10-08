@@ -233,6 +233,35 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain('Sign in required');
   });
 
+  it('orders the step funnel by path, drop-off or reach, keeping the place of each step in the path', async () => {
+    respond(200, REPORT);
+    await renderPage();
+    const funnel = container.querySelector('section[aria-labelledby="dash-funnel"]')!;
+    const rows = () =>
+      [...funnel.querySelectorAll('.dash-card')].map((card) =>
+        [...card.querySelectorAll('tbody tr')].map((row) => `${row.querySelector('.dash-step-pos')!.textContent} ${row.querySelector('.mono')!.textContent}`),
+      );
+    const pick = async (label: string) => {
+      const option = [...funnel.querySelectorAll('.segmented button')].find((b) => b.textContent === label) as HTMLButtonElement;
+      await act(async () => option.click());
+    };
+    const path = ['1 intro', '2 work_mode', '3 security_constraints', '4 result'];
+    expect(rows()).toEqual([path, path]);
+
+    await pick('Drop-off');
+    expect(rows()).toEqual([
+      ['2 work_mode', '1 intro', '3 security_constraints', '4 result'],
+      ['2 work_mode', '1 intro', '3 security_constraints', '4 result'],
+    ]);
+    await pick('Reach');
+    expect(rows()).toEqual([
+      ['1 intro', '2 work_mode', '4 result', '3 security_constraints'],
+      ['1 intro', '2 work_mode', '4 result', '3 security_constraints'],
+    ]);
+    await pick('Step order');
+    expect(rows()).toEqual([path, path]);
+  });
+
   it('suggests demo data when there are no events', async () => {
     respond(200, EMPTY);
     await renderPage();

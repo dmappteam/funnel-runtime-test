@@ -246,6 +246,8 @@ export const en = {
     conditionalHint: 'Shown only to sessions whose answers meet its visibleWhen condition',
     reachedOf: (reached: string, started: string) => `${reached} of ${started} started sessions`,
     worst: 'Biggest drop-off',
+    order: 'Order',
+    orders: { steps: 'Step order', dropoff: 'Drop-off', reached: 'Reach' },
   },
   results: {
     withResult: (n: string) => `${n} sessions with a result`,

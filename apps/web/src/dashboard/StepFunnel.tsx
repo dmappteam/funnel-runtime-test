@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { GroupReport, StepMetrics } from '@funnel/contracts';
 import { DASH } from '../internal/format';
 import { useI18n } from '../internal/i18n';
@@ -15,7 +16,21 @@ function worstStepId(steps: StepMetrics[]): string | null {
   return worst?.stepId ?? null;
 }
 
-function FunnelCard({ group }: { group: GroupReport }) {
+export type StepOrder = 'steps' | 'dropoff' | 'reached';
+
+const ORDERS: readonly StepOrder[] = ['steps', 'dropoff', 'reached'];
+
+/** Path order as configured, or the steps losing / reaching the most sessions first. Ties keep the path order. */
+export function sortSteps(steps: readonly StepMetrics[], order: StepOrder): StepMetrics[] {
+  const byPath = (a: StepMetrics, b: StepMetrics) => a.position - b.position;
+  if (order === 'dropoff') {
+    return steps.toSorted((a, b) => b.dropoff - a.dropoff || (b.dropoffRate ?? 0) - (a.dropoffRate ?? 0) || byPath(a, b));
+  }
+  if (order === 'reached') return steps.toSorted((a, b) => b.reached - a.reached || byPath(a, b));
+  return steps.toSorted(byPath);
+}
+
+function FunnelCard({ group, order }: { group: GroupReport; order: StepOrder }) {
   const { t, f } = useI18n();
   const worst = worstStepId(group.steps);
   return (
@@ -39,7 +54,7 @@ function FunnelCard({ group }: { group: GroupReport }) {
               </tr>
             </thead>
             <tbody>
-              {group.steps.map((s) => {
+              {sortSteps(group.steps, order).map((s) => {
                 const final = s.type === 'result';
                 const isWorst = s.stepId === worst;
                 return (
@@ -84,10 +99,11 @@ function FunnelCard({ group }: { group: GroupReport }) {
   );
 }
 
-/** One table per variant, side by side, each in the variant's own step order. */
+/** One table per variant, side by side. By default each follows the variant's own step order; the number keeps a step's place in it. */
 export function StepFunnel({ groups }: { groups: GroupReport[] }) {
   const { t } = useI18n();
   const { lead } = t.funnel;
+  const [order, setOrder] = useState<StepOrder>('steps');
   return (
     <>
       <p className="dash-lead">
@@ -96,9 +112,19 @@ export function StepFunnel({ groups }: { groups: GroupReport[] }) {
         <strong>{lead.dropoff}</strong>
         {lead.dropoffText}
       </p>
+      <div className="dash-order">
+        <span className="muted">{t.funnel.order}</span>
+        <div className="segmented" role="group" aria-label={t.funnel.order}>
+          {ORDERS.map((option) => (
+            <button key={option} type="button" aria-pressed={order === option} onClick={() => setOrder(option)}>
+              {t.funnel.orders[option]}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="dash-grid-2">
         {groups.map((g) => (
-          <FunnelCard key={g.variant} group={g} />
+          <FunnelCard key={g.variant} group={g} order={order} />
         ))}
       </div>
     </>
