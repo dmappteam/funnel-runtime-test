@@ -2,7 +2,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AnalyticsResponse, GroupReport, KpiSet, Rate, StepMetrics, StepType } from '@funnel/contracts';
+import type { AnalyticsResponse, GroupReport, KpiSet, Rate, StepMetrics } from '@funnel/contracts';
+import type { StepType } from '@funnel/engine';
 import { DashboardPage } from './DashboardPage';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
