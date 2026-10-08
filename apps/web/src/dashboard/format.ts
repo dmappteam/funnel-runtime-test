@@ -1,21 +1,23 @@
-// Locale-aware formatting. Percentages always carry one decimal.
+// One fixed locale, so numbers match the English interface whatever the browser locale is. Percentages carry one decimal.
 
-const count = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-const percent = new Intl.NumberFormat(undefined, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const signedPercent = new Intl.NumberFormat(undefined, {
+const LOCALE = 'en-AU';
+
+const count = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+const percent = new Intl.NumberFormat(LOCALE, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const signedPercent = new Intl.NumberFormat(LOCALE, {
   style: 'percent',
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
   signDisplay: 'exceptZero',
 });
-const signedDecimal = new Intl.NumberFormat(undefined, {
+const signedDecimal = new Intl.NumberFormat(LOCALE, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
   signDisplay: 'exceptZero',
 });
-const pValue = new Intl.NumberFormat(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
+const pValue = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const dateTime = new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
+const time = new Intl.DateTimeFormat(LOCALE, { timeStyle: 'medium' });
 
 export const DASH = '—';
 
