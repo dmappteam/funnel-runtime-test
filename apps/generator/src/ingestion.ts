@@ -36,6 +36,7 @@ export class IngestionLog {
   readonly rejectedByReason: Record<string, number> = {};
   /** First few unexpected statuses, for diagnostics. */
   readonly anomalies: string[] = [];
+  private anomalyCount = 0;
 
   add(event: ClientEvent, valid: boolean): void {
     this.tracked.set(event.event_id, { event, valid, sends: 0, statuses: [], uncertain: false });
@@ -107,8 +108,6 @@ export class IngestionLog {
       { name: 'unexpected statuses', expected: '0', actual: this.anomalyCount, ok: this.anomalyCount === 0 },
     ];
   }
-
-  private anomalyCount = 0;
 
   private note(message: string): void {
     this.anomalyCount++;

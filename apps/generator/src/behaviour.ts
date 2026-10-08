@@ -40,20 +40,22 @@ export const UTM_PROFILES: readonly UtmProfile[] = [
 export const BEHAVIOUR = {
   /** QA traffic that forces a variant (`?variant=`). Excluded from the A/B comparison. */
   overrideShare: 0.05,
-  backShare: 0.12,
+  /** Planned above the target (about 12%): users who leave before the planned moment never go back. */
+  backShare: 0.165,
   /** Of the sessions that go back: return to work_mode right after answering it and switch the mode. */
   branchBackShare: 0.4,
-  refreshShare: 0.1,
+  /** Planned above the target (about 10%) for the same reason. */
+  refreshShare: 0.12,
   /** Chance to PUT the session state after a forward move, like a browser saving now and then. */
   saveStateChance: 0.5,
   /** Chance of a rejected input before the valid answer. Validation errors emit no events. */
   invalidFirst: { number: 0.08, 'multi-select': 0.05, 'single-select': 0.02 } as Record<string, number>,
   leave: { info: 0.07, 'single-select': 0.035, 'multi-select': 0.05, number: 0.06, result: 0 } as Record<StepType, number>,
   /** Variant A opens with a number question (team size); more users give up there than on B's first number question. */
-  firstNumberExtraLeave: { A: 0.1 } as Record<string, number>,
+  firstNumberExtraLeave: { A: 0.08 } as Record<string, number>,
   /** B frames the result CTA more concretely. */
-  ctaClick: { A: 0.42, B: 0.55 } as Record<string, number>,
-  ctaClickDefault: 0.45,
+  ctaClick: { A: 0.45, B: 0.53 } as Record<string, number>,
+  ctaClickDefault: 0.48,
 } as const;
 
 export const WORK_MODES = ['remote', 'hybrid', 'office'] as const;
