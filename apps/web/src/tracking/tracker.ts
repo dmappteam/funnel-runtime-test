@@ -170,7 +170,11 @@ export function createTracker(options: TrackerOptions = {}): Tracker {
   async function flush(): Promise<void> {
     if (inFlight || stopped) return;
     const batch = outbox.read().slice(0, MAX_BATCH_SIZE);
-    if (batch.length === 0) return;
+    if (batch.length === 0) {
+      // Another tab sent what failed here: nothing is left to retry, so `track` schedules sends again.
+      failures = 0;
+      return;
+    }
     cancelTimer();
     inFlight = true;
     let settled: boolean;
