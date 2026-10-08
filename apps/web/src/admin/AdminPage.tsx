@@ -160,15 +160,15 @@ export function AdminPage() {
                     type="button"
                     className="btn btn-secondary btn-sm"
                     disabled={overview.rollbackTarget === null || busy}
+                    title={overview.rollbackTarget === null ? 'No previously published version to return to' : undefined}
                     onClick={() => overview.rollbackTarget !== null && void rollback(overview.rollbackTarget)}
                   >
                     {overview.rollbackTarget === null ? 'Roll back' : `Roll back to v${overview.rollbackTarget}`}
                   </button>
                 </div>
                 <p className="adm-hint">
-                  {overview.rollbackTarget === null
-                    ? 'Nothing to roll back to: only one version has been published.'
-                    : `Rollback makes v${overview.rollbackTarget} active for new sessions. Sessions already started stay on their version.`}
+                  Rollback re-activates the previously published version for new sessions. Sessions already started stay on
+                  their version.
                 </p>
                 <VersionsTable
                   versions={overview.versions}

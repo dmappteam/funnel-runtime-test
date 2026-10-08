@@ -35,6 +35,12 @@ function ConfirmDialog({ title, body, confirmLabel, tone = 'default', onClose }:
     if (dialog && !dialog.open) dialog.showModal();
   }, []);
 
+  // close() before unmounting lets the browser return focus to the button that opened the dialog.
+  const finish = (confirmed: boolean) => {
+    ref.current?.close();
+    onClose(confirmed);
+  };
+
   return (
     <dialog
       ref={ref}
@@ -42,16 +48,16 @@ function ConfirmDialog({ title, body, confirmLabel, tone = 'default', onClose }:
       aria-labelledby="adm-dialog-title"
       onCancel={(event) => {
         event.preventDefault();
-        onClose(false);
+        finish(false);
       }}
     >
       <h2 id="adm-dialog-title">{title}</h2>
       <div className="adm-dialog-body">{body}</div>
       <div className="adm-dialog-actions">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => onClose(false)}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => finish(false)}>
           Cancel
         </button>
-        <button type="button" className={`btn btn-sm${tone === 'danger' ? ' btn-danger' : ''}`} onClick={() => onClose(true)}>
+        <button type="button" className={`btn btn-sm${tone === 'danger' ? ' btn-danger' : ''}`} onClick={() => finish(true)}>
           {confirmLabel}
         </button>
       </div>
