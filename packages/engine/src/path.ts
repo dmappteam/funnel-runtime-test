@@ -137,7 +137,7 @@ export function resolveResult(funnel: ResolvedFunnel, answers: Answers): { resul
   const lookup = makeLookup(path.effective, path.pending);
   const rule = funnel.resultRules.find((r) => evaluateCondition(r.when, lookup) === true);
   const resultId = rule?.resultId ?? funnel.defaultResultId;
-  const result = funnel.results[resultId];
+  const result = has(funnel.results, resultId) ? funnel.results[resultId] : undefined;
   if (!result) throw new Error(`Result "${resultId}" is not defined in ${funnel.funnelId} v${funnel.version}`);
   return { resultId, result };
 }

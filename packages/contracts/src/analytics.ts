@@ -32,8 +32,7 @@ export const AnalyticsQuerySchema = z.object({
   version: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
   campaign: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
   includeOverrides: z
-    .enum(['true', 'false', '1', '0'])
-    .optional()
+    .preprocess(emptyToUndefined, z.enum(['true', 'false', '1', '0']).optional())
     .transform((v) => v === 'true' || v === '1'),
 });
 

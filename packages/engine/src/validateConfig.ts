@@ -11,7 +11,11 @@ import {
   type FunnelConfig,
   type InputStep,
   type LeafCondition,
+  type Step,
 } from './schema';
+
+/** Own keys only: ids like "constructor" or "toString" must not resolve to Object.prototype members. */
+const has = (obj: object, key: string) => Object.hasOwn(obj, key);
 
 export interface ConfigIssue {
   path: string;
@@ -74,13 +78,13 @@ export function validateConfig(raw: unknown): ConfigValidation {
     checkInput(step, at, error);
   }
 
-  const checkCondition = (cond: Condition, at: string) => {
+  const checkCondition = (cond: Condition, at: string, answers: ReadonlyMap<string, InputStep>) => {
     for (const leaf of collectLeaves(cond)) {
       if (!(OPERATORS as readonly string[]).includes(leaf.operator)) {
         error(at, `Unsupported operator "${leaf.operator}"`);
         continue;
       }
-      const owner = owners.get(leaf.answer);
+      const owner = answers.get(leaf.answer);
       if (!owner) {
         error(at, `Unknown answer "${leaf.answer}"`);
         continue;
@@ -94,19 +98,19 @@ export function validateConfig(raw: unknown): ConfigValidation {
   };
 
   for (const [key, step] of Object.entries(config.steps)) {
-    if (step.visibleWhen) checkCondition(step.visibleWhen, `steps.${key}.visibleWhen`);
+    if (step.visibleWhen) checkCondition(step.visibleWhen, `steps.${key}.visibleWhen`, owners);
   }
 
   // Results
   for (const [key, result] of Object.entries(config.results)) {
     if (result.id !== key) error(`results.${key}.id`, `Result id "${result.id}" must match its key "${key}"`);
   }
-  if (!config.results[config.defaultResultId]) {
+  if (!has(config.results, config.defaultResultId)) {
     error('defaultResultId', `Unknown result "${config.defaultResultId}"`);
   }
   config.resultRules.forEach((rule, i) => {
-    if (!config.results[rule.resultId]) error(`resultRules.${i}.resultId`, `Unknown result "${rule.resultId}"`);
-    checkCondition(rule.when, `resultRules.${i}.when`);
+    if (!has(config.results, rule.resultId)) error(`resultRules.${i}.resultId`, `Unknown result "${rule.resultId}"`);
+    checkCondition(rule.when, `resultRules.${i}.when`, owners);
   });
 
   // Experiment
@@ -118,31 +122,81 @@ export function validateConfig(raw: unknown): ConfigValidation {
   if (config.experiment.assignment !== 'server') {
     error('experiment.assignment', `Unsupported assignment "${config.experiment.assignment}"`);
   }
+  if (config.experiment.overrideQueryParam !== 'variant') {
+    // The runtime reads ?variant= before it knows the active config, so another name would silently not work.
+    error('experiment.overrideQueryParam', `Only "variant" is supported, got "${config.experiment.overrideQueryParam}"`);
+  }
 
   for (const [name, variant] of variants) {
     const at = `experiment.variants.${name}`;
     const sequence = variant.stepSequence;
     const seen = new Set<string>();
     sequence.forEach((id, i) => {
-      if (!config.steps[id]) error(`${at}.stepSequence.${i}`, `Unknown step "${id}"`);
+      if (!has(config.steps, id)) error(`${at}.stepSequence.${i}`, `Unknown step "${id}"`);
       if (seen.has(id)) error(`${at}.stepSequence.${i}`, `Step "${id}" appears twice`);
       seen.add(id);
     });
-    const resultPositions = sequence.flatMap((id, i) => (config.steps[id]?.type === 'result' ? [i] : []));
+    const resultPositions = sequence.flatMap((id, i) => (has(config.steps, id) && config.steps[id]!.type === 'result' ? [i] : []));
     if (resultPositions.length !== 1 || resultPositions[0] !== sequence.length - 1) {
       error(`${at}.stepSequence`, 'The sequence must end with exactly one result step');
     }
 
+    for (const [stepId, override] of Object.entries(variant.stepOverrides)) {
+      const oat = `${at}.stepOverrides.${stepId}`;
+      if (!has(config.steps, stepId)) {
+        error(oat, `Unknown step "${stepId}"`);
+        continue;
+      }
+      if ('id' in override || 'type' in override) error(oat, 'An override cannot change id or type');
+      if (!sequence.includes(stepId)) warn(oat, `Step "${stepId}" is not in variant ${name}, the override has no effect`);
+    }
+
+    // What this variant actually runs: its steps with the overrides applied. Every runtime rule is checked on these.
+    const steps = new Map<string, Step>();
+    for (const id of sequence) {
+      if (!has(config.steps, id)) continue;
+      const base = config.steps[id]!;
+      if (!has(variant.stepOverrides, id)) {
+        steps.set(id, base);
+        continue;
+      }
+      const merged = StepSchema.safeParse(deepMerge(base, variant.stepOverrides[id]));
+      if (merged.success) steps.set(id, merged.data);
+      else error(`${at}.stepOverrides.${id}`, `The override makes the step invalid: ${merged.error.issues[0]?.message ?? 'unknown error'}`);
+    }
+
+    const answers = new Map<string, InputStep>();
+    for (const step of steps.values()) {
+      if (!hasInput(step)) continue;
+      const other = answers.get(step.input.name);
+      if (other) error(`${at}.stepSequence`, `Steps "${other.id}" and "${step.id}" both store answer "${step.input.name}" in variant ${name}`);
+      else answers.set(step.input.name, step);
+    }
+
+    for (const id of sequence) {
+      const step = steps.get(id);
+      if (!step || !has(variant.stepOverrides, id)) continue;
+      const oat = `${at}.stepOverrides.${id}`;
+      if (hasInput(step)) checkInput(step, oat, error);
+      if (step.visibleWhen) checkCondition(step.visibleWhen, `${oat}.visibleWhen`, answers);
+    }
+
     sequence.forEach((id, i) => {
-      const cond = config.steps[id]?.visibleWhen;
-      if (!cond) return;
-      for (const ref of collectAnswerRefs(cond)) {
-        const owner = owners.get(ref);
-        if (!owner) continue;
-        const j = sequence.indexOf(owner.id);
-        if (j === -1) {
-          warn(`${at}.stepSequence`, `Step "${id}" depends on "${ref}", which variant ${name} never asks, so it stays hidden`);
-        } else if (j >= i) {
+      const step = steps.get(id);
+      if (!step?.visibleWhen) return;
+      if (step.type === 'result') {
+        error(`${at}.stepSequence`, `The result step "${id}" cannot have visibleWhen: sessions would never reach a result`);
+        return;
+      }
+      for (const ref of collectAnswerRefs(step.visibleWhen)) {
+        const owner = answers.get(ref);
+        if (!owner) {
+          if (owners.has(ref)) {
+            warn(`${at}.stepSequence`, `Step "${id}" depends on "${ref}", which variant ${name} never asks, so it stays hidden`);
+          }
+          continue;
+        }
+        if (sequence.indexOf(owner.id) >= i) {
           error(`${at}.stepSequence`, `Step "${id}" depends on "${ref}", which variant ${name} asks later`);
         }
       }
@@ -150,29 +204,15 @@ export function validateConfig(raw: unknown): ConfigValidation {
 
     config.resultRules.forEach((rule, i) => {
       for (const ref of collectAnswerRefs(rule.when)) {
-        const owner = owners.get(ref);
-        if (owner && !sequence.includes(owner.id)) {
+        if (owners.has(ref) && !answers.has(ref)) {
           warn(`resultRules.${i}.when`, `Rule "${rule.resultId}" uses "${ref}", which variant ${name} never asks`);
         }
       }
     });
 
-    for (const [stepId, override] of Object.entries(variant.stepOverrides)) {
-      const oat = `${at}.stepOverrides.${stepId}`;
-      const base = config.steps[stepId];
-      if (!base) {
-        error(oat, `Unknown step "${stepId}"`);
-        continue;
-      }
-      if ('id' in override || 'type' in override) error(oat, 'An override cannot change id or type');
-      if (!sequence.includes(stepId)) warn(oat, `Step "${stepId}" is not in variant ${name}, the override has no effect`);
-      const merged = StepSchema.safeParse(deepMerge(base, override));
-      if (!merged.success) error(oat, `The override makes the step invalid: ${merged.error.issues[0]?.message ?? 'unknown error'}`);
-    }
-
     for (const [resultId, override] of Object.entries(variant.resultOverrides)) {
       const oat = `${at}.resultOverrides.${resultId}`;
-      const base = config.results[resultId];
+      const base = has(config.results, resultId) ? config.results[resultId] : undefined;
       if (!base) {
         error(oat, `Unknown result "${resultId}"`);
         continue;

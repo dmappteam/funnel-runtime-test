@@ -22,20 +22,21 @@ export function variantNames(config: FunnelConfig): string[] {
 
 /** Applies a variant's step order and overrides. The result is what a session pinned to this version and variant runs. */
 export function resolveVariant(config: FunnelConfig, variant: string): ResolvedFunnel {
-  const def = config.experiment.variants[variant];
+  // Own keys only, so ids like "constructor" never resolve to Object.prototype members.
+  const def = Object.hasOwn(config.experiment.variants, variant) ? config.experiment.variants[variant] : undefined;
   if (!def) throw new Error(`Variant "${variant}" is not defined in ${config.funnelId} v${config.version}`);
 
   const steps: Record<string, Step> = {};
   for (const id of def.stepSequence) {
-    const base = config.steps[id];
+    const base = Object.hasOwn(config.steps, id) ? config.steps[id] : undefined;
     if (!base) throw new Error(`Step "${id}" is not defined in ${config.funnelId} v${config.version}`);
-    const override = def.stepOverrides[id];
+    const override = Object.hasOwn(def.stepOverrides, id) ? def.stepOverrides[id] : undefined;
     steps[id] = override ? deepMerge(base, override) : base;
   }
 
   const results: Record<string, ResultDef> = {};
   for (const [id, base] of Object.entries(config.results)) {
-    const override = def.resultOverrides[id];
+    const override = Object.hasOwn(def.resultOverrides, id) ? def.resultOverrides[id] : undefined;
     results[id] = override ? deepMerge(base, override) : base;
   }
 

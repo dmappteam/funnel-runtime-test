@@ -30,6 +30,7 @@ describe('request schemas', () => {
       includeOverrides: true,
     });
     expect(AnalyticsQuerySchema.parse({ version: '2' })).toEqual({ version: 2, includeOverrides: false });
+    expect(AnalyticsQuerySchema.parse({ includeOverrides: '' })).toEqual({ includeOverrides: false });
   });
 });
 

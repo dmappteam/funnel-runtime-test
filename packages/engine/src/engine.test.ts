@@ -79,6 +79,63 @@ describe('validateConfig', () => {
     expect(r.errors[0]?.path).toBe('steps.team_size.type');
   });
 
+  it('checks variant overrides like base steps: operators, inputs, dependency order, answer names', () => {
+    const operator = broken((c) => {
+      c.experiment.variants.B.stepOverrides.office_days = {
+        visibleWhen: { answer: 'work_mode', operator: 'one_of', value: ['hybrid'] },
+      };
+    });
+    expect(messages(operator)).toContain('Unsupported operator "one_of"');
+
+    const order = broken((c) => {
+      c.experiment.variants.B.stepOverrides.meeting_hours = {
+        visibleWhen: { answer: 'team_size', operator: 'gte', value: 5 },
+      };
+    });
+    expect(messages(order)).toContain('Step "meeting_hours" depends on "team_size", which variant B asks later');
+
+    const limits = broken((c) => {
+      c.experiment.variants.B.stepOverrides.priorities.validation = { minSelections: 4 };
+    });
+    expect(messages(limits)).toContain('minSelections must not exceed maxSelections');
+
+    const sharedName = broken((c) => {
+      c.experiment.variants.B.stepOverrides.team_size = { input: { name: 'work_mode' } };
+    });
+    expect(messages(sharedName)).toContain('both store answer "work_mode" in variant B');
+  });
+
+  it('rejects a conditional result step', () => {
+    const r = broken((c) => (c.steps.result.visibleWhen = { answer: 'work_mode', operator: 'neq', value: 'remote' }));
+    expect(messages(r)).toContain('The result step "result" cannot have visibleWhen');
+  });
+
+  it('does not resolve ids to Object.prototype members', () => {
+    const r = broken((c) => {
+      c.experiment.variants.A.stepSequence.splice(1, 0, 'constructor');
+      c.defaultResultId = 'toString';
+    });
+    expect(messages(r)).toContain('Unknown step "constructor"');
+    expect(messages(r)).toContain('Unknown result "toString"');
+  });
+
+  it('keeps ids within the limits of the API and the TTL within a year', () => {
+    const r = broken((c) => {
+      c.steps.team_size.input.name = 'x'.repeat(65);
+      c.experiment.id = 'e'.repeat(129);
+      c.session.ttlHours = 1e8;
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.map((e) => e.path)).toEqual(
+      expect.arrayContaining(['steps.team_size.input.name', 'experiment.id', 'session.ttlHours']),
+    );
+  });
+
+  it('rejects an override query parameter the runtime does not read', () => {
+    const r = broken((c) => (c.experiment.overrideQueryParam = 'qa_variant'));
+    expect(messages(r)).toContain('Only "variant" is supported');
+  });
+
   it('warns when a variant never asks a question that a step depends on', () => {
     const r = broken((c) => {
       const seq: string[] = c.experiment.variants.B.stepSequence;

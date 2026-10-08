@@ -66,11 +66,15 @@ const ContentSchema = z.object({
   retryLabel: z.string().optional(),
 });
 
-const OptionSchema = z.object({ value: z.string().min(1), label: z.string().min(1) });
+/** Limits match the wire schemas in @funnel/contracts: a config that passes validation must fit the API. */
+const ID_MAX = 64;
+const idSchema = z.string().min(1).max(ID_MAX);
+
+const OptionSchema = z.object({ value: z.string().min(1).max(200), label: z.string().min(1) });
 const MessagesSchema = z.record(z.string(), z.string());
 
 const baseStep = {
-  id: z.string().min(1),
+  id: idSchema,
   content: ContentSchema.default({}),
   visibleWhen: ConditionSchema.optional(),
 };
@@ -80,7 +84,7 @@ export const InfoStepSchema = z.object({ ...baseStep, type: z.literal('info') })
 export const SingleSelectStepSchema = z.object({
   ...baseStep,
   type: z.literal('single-select'),
-  input: z.object({ name: z.string().min(1), options: z.array(OptionSchema).min(1) }),
+  input: z.object({ name: idSchema, options: z.array(OptionSchema).min(1) }),
   validation: z
     .object({ required: z.boolean().default(true), messages: MessagesSchema.default({}) })
     .default({ required: true, messages: {} }),
@@ -89,7 +93,7 @@ export const SingleSelectStepSchema = z.object({
 export const MultiSelectStepSchema = z.object({
   ...baseStep,
   type: z.literal('multi-select'),
-  input: z.object({ name: z.string().min(1), options: z.array(OptionSchema).min(1) }),
+  input: z.object({ name: idSchema, options: z.array(OptionSchema).min(1) }),
   validation: z
     .object({
       required: z.boolean().default(true),
@@ -104,7 +108,7 @@ export const NumberStepSchema = z.object({
   ...baseStep,
   type: z.literal('number'),
   input: z.object({
-    name: z.string().min(1),
+    name: idSchema,
     min: z.number().optional(),
     max: z.number().optional(),
     step: z.number().positive().optional(),
@@ -147,11 +151,11 @@ export function hasInput(step: Step): step is InputStep {
 // ---------------------------------------------------------------------------
 
 export const ResultSchema = z.object({
-  id: z.string().min(1),
+  id: idSchema,
   title: z.string(),
   summary: z.string().default(''),
   recommendations: z.array(z.string()).default([]),
-  cta: z.object({ label: z.string().min(1), action: z.string().min(1) }),
+  cta: z.object({ label: z.string().min(1), action: idSchema }),
 });
 export type ResultDef = z.infer<typeof ResultSchema>;
 
@@ -159,14 +163,14 @@ const OverrideMapSchema = z.record(z.string(), z.record(z.string(), z.unknown())
 
 export const VariantSchema = z.object({
   weight: z.number().min(0),
-  stepSequence: z.array(z.string().min(1)).min(1),
+  stepSequence: z.array(idSchema).min(1),
   stepOverrides: OverrideMapSchema.default({}),
   resultOverrides: OverrideMapSchema.default({}),
 });
 export type VariantDef = z.infer<typeof VariantSchema>;
 
 export const ExperimentSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().min(1).max(128),
   assignment: z.string().default('server'),
   sticky: z.boolean().default(true),
   overrideQueryParam: z.string().min(1).default('variant'),
@@ -188,7 +192,7 @@ export const EventsConfigSchema = z.object({
     .default({ storeRawAnswers: false, allowAnswerKinds: true }),
 });
 
-export const ResultRuleSchema = z.object({ resultId: z.string().min(1), when: ConditionSchema });
+export const ResultRuleSchema = z.object({ resultId: idSchema, when: ConditionSchema });
 
 // ---------------------------------------------------------------------------
 // Funnel config
@@ -205,7 +209,8 @@ export const FunnelConfigSchema = z.object({
   releaseNote: z.string().optional(),
   session: z
     .object({
-      ttlHours: z.number().positive().default(72),
+      // Capped at a year: expiry dates must stay valid ISO timestamps.
+      ttlHours: z.number().positive().max(24 * 365).default(72),
       persistAnswers: z.boolean().default(true),
       pinVersion: z.boolean().default(true),
       pinExperimentVariant: z.boolean().default(true),
@@ -220,7 +225,7 @@ export const FunnelConfigSchema = z.object({
   experiment: ExperimentSchema,
   steps: z.record(z.string(), StepSchema),
   resultRules: z.array(ResultRuleSchema).default([]),
-  defaultResultId: z.string().min(1),
+  defaultResultId: idSchema,
   results: z.record(z.string(), ResultSchema),
   events: EventsConfigSchema,
 });
