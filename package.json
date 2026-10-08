@@ -1,0 +1,32 @@
+{
+  "name": "funnel-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Configurable multi-step funnels with versioning, rollback, A/B experiments, idempotent event ingestion and analytics.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,magenta \"npm run dev -w @funnel/server\" \"npm run dev -w @funnel/web\"",
+    "build": "npm run build -w @funnel/web && npm run build -w @funnel/server",
+    "start": "npm run start -w @funnel/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "generate": "tsx apps/generator/src/cli.ts",
+    "demo": "tsx apps/generator/src/cli.ts --scenario demo"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "concurrently": "^10.0.5",
+    "jsdom": "^30.1.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

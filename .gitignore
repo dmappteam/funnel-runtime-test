@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+coverage/
+generator-report*.json
+.DS_Store
+.claude/worktrees/
+.vitest/
