@@ -1,0 +1,935 @@
+/* Funnel runtime. Mobile-first single column; colours, radii and shadows come from the tokens in styles.css. */
+
+.fn-app {
+  --fn-max: 560px;
+  --fn-gutter: 20px;
+  --fn-card-shadow: 0 1px 2px rgb(16 24 40 / 5%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background:
+    radial-gradient(130% 48% at 50% -8%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%),
+    var(--bg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fn-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Top bar: back button, step counter, progress */
+
+.fn-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  -webkit-backdrop-filter: saturate(1.5) blur(16px);
+  backdrop-filter: saturate(1.5) blur(16px);
+}
+
+.fn-topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: var(--fn-max);
+  min-height: 52px;
+  margin: 0 auto;
+  padding: 6px var(--fn-gutter) 2px;
+}
+
+.fn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 40px;
+  margin-left: -10px;
+  padding: 0 14px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.fn-back[hidden] {
+  display: none;
+}
+.fn-back svg {
+  width: 22px;
+  height: 22px;
+}
+@media (hover: hover) {
+  .fn-back:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+.fn-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.fn-progress {
+  max-width: var(--fn-max);
+  margin: 0 auto;
+  padding: 6px var(--fn-gutter) 12px;
+  transition: opacity 0.3s var(--ease);
+}
+.fn-progress[data-visible='false'] {
+  opacity: 0;
+}
+
+.fn-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.fn-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, var(--surface)), var(--accent));
+  transition: width 0.55s var(--ease);
+}
+
+/* Layout */
+
+.fn-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--fn-max);
+  margin: 0 auto;
+  padding: 16px var(--fn-gutter) 0;
+}
+
+.fn-center {
+  justify-content: center;
+}
+
+.fn-step {
+  --fn-shift: 0px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  animation: fn-enter 0.34s var(--ease) backwards;
+}
+.fn-step[data-direction='forward'] {
+  --fn-shift: 20px;
+}
+.fn-step[data-direction='back'] {
+  --fn-shift: -20px;
+}
+
+.fn-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fn-step-body {
+  padding-bottom: 12px;
+}
+
+/* Step header */
+
+.fn-head {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.fn-eyebrow {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fn-title {
+  font-size: clamp(24px, 6.6vw, 30px);
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.fn-title:focus,
+.fn-title:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.fn-title--sm {
+  font-size: 22px;
+}
+
+.fn-helper {
+  color: var(--text-muted);
+  font-size: 16px;
+  text-wrap: pretty;
+}
+
+.fn-note {
+  color: var(--text-faint);
+  font-size: 14px;
+}
+
+/* Option cards (single and multi select) */
+
+.fn-options {
+  display: grid;
+  gap: 10px;
+}
+
+.fn-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 60px;
+  margin: 0;
+  padding: 16px 16px 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--fn-card-shadow);
+  color: var(--text);
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    background 0.18s var(--ease),
+    opacity 0.18s var(--ease),
+    transform 0.12s var(--ease);
+  animation: fn-rise 0.42s var(--ease) backwards;
+  animation-delay: calc(var(--i, 0) * 35ms + 60ms);
+}
+@media (hover: hover) {
+  .fn-option:hover:not([data-disabled='true']) {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow);
+  }
+}
+.fn-option:active:not([data-disabled='true']) {
+  transform: scale(0.985);
+}
+.fn-option[aria-checked='true'],
+.fn-option[data-checked='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 8px 20px -12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.fn-option:focus-visible,
+.fn-option:has(.fn-option-input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.fn-option[aria-checked='true']:focus-visible,
+.fn-option[data-checked='true']:has(.fn-option-input:focus-visible) {
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--focus-ring);
+}
+.fn-option[data-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.fn-options[data-committing] .fn-option:not([aria-checked='true']) {
+  opacity: 0.55;
+}
+
+.fn-option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The native checkbox stays focusable and clickable through its label, but is drawn by .fn-checkbox. */
+.fn-option-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fn-radio,
+.fn-checkbox {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  transition:
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.fn-radio {
+  border-radius: 50%;
+}
+.fn-radio::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-contrast);
+  transform: scale(0);
+  transition: transform 0.22s var(--ease);
+}
+[aria-checked='true'] > .fn-radio {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+[aria-checked='true'] > .fn-radio::after {
+  transform: scale(1);
+}
+
+.fn-checkbox {
+  border-radius: 8px;
+  color: var(--accent-contrast);
+}
+.fn-checkbox svg {
+  width: 15px;
+  height: 15px;
+}
+.fn-checkbox path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.24s var(--ease) 0.04s;
+}
+[data-checked='true'] > .fn-checkbox {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+[data-checked='true'] > .fn-checkbox path {
+  stroke-dashoffset: 0;
+}
+
+.fn-select-meta {
+  margin: -12px 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition: color 0.18s var(--ease);
+}
+.fn-select-meta[data-full='true'] {
+  color: var(--accent);
+}
+
+.fn-error {
+  margin: 14px 0 0;
+  color: var(--danger);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.fn-error:empty {
+  margin: 0;
+}
+
+/* Number input */
+
+.fn-number {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 12px;
+}
+
+.fn-stepper {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--fn-card-shadow);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    opacity 0.15s var(--ease),
+    transform 0.1s var(--ease);
+}
+.fn-stepper svg {
+  width: 20px;
+  height: 20px;
+}
+@media (hover: hover) {
+  .fn-stepper:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+}
+.fn-stepper:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.fn-stepper:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.fn-number-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 16px 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--fn-card-shadow);
+  cursor: text;
+  transition:
+    border-color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease);
+}
+.fn-number-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.fn-number-field[data-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.fn-number-input {
+  flex: 0 1 auto;
+  min-width: 1.5ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 44px;
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  caret-color: var(--accent);
+}
+.fn-number-input:focus,
+.fn-number-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.fn-number-input::placeholder {
+  color: var(--text-faint);
+  opacity: 0.6;
+}
+
+.fn-unit {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.fn-range {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.fn-number + .fn-range + .fn-error,
+.fn-number + .fn-error {
+  text-align: center;
+}
+
+/* Action bar */
+
+.fn-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: auto calc(-1 * var(--fn-gutter)) 0;
+  padding: 28px var(--fn-gutter) max(16px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg) 36%);
+  pointer-events: none;
+}
+
+.fn-actions-inner {
+  pointer-events: auto;
+}
+
+.fn-cta {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 16px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 12px 24px -14px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+.fn-cta svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s var(--ease);
+}
+@media (hover: hover) {
+  .fn-cta:hover svg:last-child {
+    transform: translateX(3px);
+  }
+}
+.fn-cta[aria-disabled='true'] {
+  opacity: 0.45;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.fn-cta[aria-disabled='true']:hover {
+  background: var(--accent);
+}
+.fn-cta[aria-disabled='true']:active {
+  transform: none;
+}
+.fn-cta[aria-disabled='true'] svg {
+  transform: none;
+}
+.fn-cta--inline {
+  width: auto;
+  margin-top: 8px;
+  padding: 0 28px;
+}
+
+/* Info step and the orbit mark */
+
+.fn-info {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+}
+.fn-info .fn-head {
+  gap: 14px;
+}
+.fn-info .fn-eyebrow {
+  justify-self: start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.fn-info .fn-title {
+  font-size: clamp(30px, 8.8vw, 42px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+.fn-info .fn-helper {
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.fn-orbit {
+  position: relative;
+  flex: none;
+  width: 108px;
+  height: 108px;
+  margin: 4px 0 24px;
+}
+
+.fn-orbit-ring {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 50%;
+  animation: fn-spin 30s linear infinite;
+}
+.fn-orbit-ring i {
+  position: absolute;
+  top: -4px;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.fn-orbit-ring--outer {
+  inset: 0;
+}
+.fn-orbit-ring--middle {
+  inset: 17%;
+  border-style: dashed;
+  animation-duration: 19s;
+  animation-direction: reverse;
+}
+.fn-orbit-ring--middle i {
+  top: auto;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+}
+.fn-orbit-ring--inner {
+  inset: 32%;
+  animation-duration: 12s;
+}
+.fn-orbit-ring--inner i {
+  top: calc(50% - 3px);
+  left: -3px;
+  width: 6px;
+  height: 6px;
+}
+
+.fn-orbit-core {
+  position: absolute;
+  inset: 39%;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--accent) 45%, #fff), var(--accent) 72%);
+  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--accent) 75%, transparent);
+  color: var(--accent-contrast);
+  transition: inset 0.45s var(--ease);
+}
+
+.fn-orbit[data-mode='busy'] .fn-orbit-ring {
+  animation-duration: 3.2s;
+}
+.fn-orbit[data-mode='busy'] .fn-orbit-ring--middle {
+  animation-duration: 2.2s;
+}
+.fn-orbit[data-mode='busy'] .fn-orbit-ring--inner {
+  animation-duration: 1.4s;
+}
+.fn-orbit[data-mode='busy'] .fn-orbit-core {
+  animation: fn-pulse 1.3s ease-in-out infinite;
+}
+
+.fn-orbit[data-mode='done'] .fn-orbit-core {
+  inset: 27%;
+  animation: fn-pop 0.5s var(--ease) backwards;
+}
+.fn-orbit-core svg {
+  width: 52%;
+  height: 52%;
+}
+.fn-orbit-core path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: fn-draw 0.45s var(--ease) 0.25s backwards;
+}
+
+/* Result */
+
+.fn-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 8px;
+}
+.fn-result .fn-orbit {
+  margin-bottom: 12px;
+}
+.fn-result .fn-title {
+  font-size: clamp(26px, 7.4vw, 34px);
+  letter-spacing: -0.03em;
+}
+
+.fn-result-summary {
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.fn-result-lines {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.fn-recos {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fn-recos:focus,
+.fn-recos:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.fn-recos li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--fn-card-shadow);
+  font-weight: 500;
+  line-height: 1.45;
+  animation: fn-rise 0.5s var(--ease) backwards;
+  animation-delay: calc(var(--i, 0) * 90ms + 60ms);
+}
+
+.fn-reco-index {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status screens */
+
+.fn-status-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin-bottom: 12vh;
+  padding: 36px 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: fn-rise 0.4s var(--ease) backwards;
+}
+
+.fn-status-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.fn-status-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* Toast */
+
+.fn-toast-region {
+  position: fixed;
+  z-index: 30;
+  top: calc(env(safe-area-inset-top) + 76px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.fn-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  padding: 8px 6px 8px 14px;
+  border-radius: 14px;
+  background: var(--text);
+  box-shadow: var(--shadow-lg);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: auto;
+  animation: fn-drop 0.35s var(--ease) backwards;
+}
+.fn-toast-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  opacity: 0.75;
+}
+.fn-toast-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.fn-toast-close:hover {
+  opacity: 1;
+}
+.fn-toast-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Skeleton */
+
+.fn-skeleton {
+  gap: 12px;
+}
+.fn-skeleton .fn-options {
+  margin-top: 20px;
+}
+
+.fn-skel {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: fn-shimmer 1.5s ease-in-out infinite;
+}
+.fn-skel--pill {
+  width: 96px;
+  height: 26px;
+  border-radius: 999px;
+}
+.fn-skel--eyebrow {
+  width: 120px;
+  height: 14px;
+}
+.fn-skel--title {
+  width: 92%;
+  height: 28px;
+}
+.fn-skel--line {
+  width: 78%;
+  height: 16px;
+}
+.fn-skel--short {
+  width: 56%;
+}
+.fn-skel--option {
+  height: 60px;
+  border-radius: 16px;
+}
+
+/* Wider screens: the actions follow the content instead of sticking to the bottom edge. */
+
+@media (min-width: 720px) {
+  .fn-app {
+    --fn-gutter: 24px;
+  }
+  .fn-main {
+    padding-top: clamp(24px, 7vh, 72px);
+  }
+  .fn-step,
+  .fn-form {
+    flex: 0 1 auto;
+  }
+  .fn-actions {
+    position: static;
+    margin: 28px 0 0;
+    padding: 0 0 64px;
+    background: none;
+    pointer-events: auto;
+  }
+}
+
+@keyframes fn-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--fn-shift));
+  }
+}
+@keyframes fn-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes fn-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes fn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes fn-pulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+@keyframes fn-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes fn-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes fn-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* The shared rule shortens durations; infinite and delayed animations are switched off entirely. */
+@media (prefers-reduced-motion: reduce) {
+  .fn-step,
+  .fn-option,
+  .fn-recos li,
+  .fn-toast,
+  .fn-status-card,
+  .fn-skel,
+  .fn-orbit-ring,
+  .fn-orbit-core,
+  .fn-orbit-core path {
+    animation: none !important;
+  }
+}
